@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Nexus Event Intelligence | EventCommand</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-container": "#131b2e",
+                        "on-primary-container": "#7c839b",
+                        "on-surface": "#1b1b1d",
+                        "on-surface-variant": "#45464d",
+                        "surface": "#fcf8fa",
+                        "surface-container": "#f0edef",
+                        "surface-container-low": "#f6f3f5",
+                        "surface-container-lowest": "#ffffff",
+                        "outline-variant": "#c6c6cd",
+                        "outline": "#76777d",
+                        "primary": "#000000",
+                        "background": "#fcf8fa",
+                        "on-primary": "#ffffff"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "container-max": "1440px",
+                        "sidebar-width": "280px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "32px",
+                        "stack-sm": "8px",
+                        "stack-md": "16px",
+                        "stack-lg": "24px"
+                    },
+                    fontFamily: {
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "body-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "label-md": ["Inter"]
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom typing cursor */
+        .typing-cursor::after {
+            content: '|';
+            animation: blink 0.8s infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
+    <!-- Import shared scripts -->
+    <script src="../assets/js/db.js"></script>
+    <script src="../assets/js/nav.js"></script>
+</head>
+<body class="bg-[#fcf8fa] dark:bg-[#0b0c10] text-[#1b1b1d] dark:text-[#c5c6c7] font-body-md min-h-screen flex transition-colors duration-200">
+
+    <!-- Shell Sidebar -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content Wrapper -->
+    <div class="flex-grow md:pl-sidebar-width flex flex-col min-h-screen">
+        <!-- Shell Header -->
+        <div id="header-container"></div>
+
+        <!-- Main Content Canvas -->
+        <main class="flex-grow p-margin-mobile md:p-margin-desktop max-w-container-max w-full mx-auto space-y-stack-lg flex flex-col">
+            
+            <!-- Page Title -->
+            <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div>
+                    <h2 class="font-headline-lg text-3xl font-bold tracking-tight text-on-surface dark:text-white">Nexus Intelligence</h2>
+                    <p class="text-body-sm text-on-surface-variant dark:text-gray-400">Advanced AI engine for predictive scheduling dynamics and campaign diagnostics.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1.5 bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300 px-3 py-1.5 rounded-full text-xs font-semibold border border-violet-200 dark:border-violet-800/40">
+                        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        AI Engine Online
+                    </span>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid Layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-stack-lg flex-grow items-stretch">
+                <!-- Chat Panel (2/3) -->
+                <div class="lg:col-span-2 flex flex-col bg-surface-container-lowest dark:bg-neutral-900/40 border border-outline-variant dark:border-neutral-800/60 rounded-xl shadow-sm overflow-hidden h-[580px]">
+                    <!-- Chat Header -->
+                    <div class="p-4 border-b border-outline-variant dark:border-neutral-800/60 bg-surface-container-low dark:bg-neutral-900/80 flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div class="p-1.5 bg-violet-100 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 rounded-lg flex items-center justify-center">
+                                <span class="material-symbols-outlined text-[20px]">smart_toy</span>
+                            </div>
+                            <div>
+                                <h3 class="font-headline-sm text-xs font-bold uppercase tracking-wider text-on-surface dark:text-white">Nexus Copilot</h3>
+                                <p class="text-[10px] text-on-surface-variant dark:text-gray-500">Ask for sentiment audits, schedule optimization, or copy copywriter assists.</p>
+                            </div>
+                        </div>
+                        <button id="clear-chat-btn" class="text-[11px] font-semibold text-on-surface-variant hover:text-red-500 underline">Reset conversation</button>
+                    </div>
+
+                    <!-- Messages Box -->
+                    <div id="chat-messages" class="flex-grow p-5 overflow-y-auto space-y-4 text-sm scroll-smooth">
+                        <!-- Default AI Message -->
+                        <div class="flex gap-3 max-w-[85%]">
+                            <div class="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/40 text-violet-600 dark:text-violet-400 flex items-center justify-center flex-shrink-0">
+                                <span class="material-symbols-outlined text-[18px]">smart_toy</span>
+                            </div>
+                            <div class="bg-surface-container-low dark:bg-neutral-900 p-3 rounded-xl border border-outline-variant/40 dark:border-neutral-800 text-on-surface dark:text-gray-300 leading-relaxed">
+                                Greetings Coordinator. I am **Nexus AI**. I have finished indexing your event database. What analytics or administrative actions would you like to execute today?
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Quick Suggestions -->
+                    <div class="px-5 py-2.5 bg-surface-container-low/40 dark:bg-neutral-950/20 border-t border-outline-variant/30 dark:border-neutral-850 flex flex-wrap gap-2 items-center">
+                        <span class="text-[10px] uppercase font-bold text-on-surface-variant dark:text-gray-500">Suggestions:</span>
+                        <button onclick="sendQuickPrompt('Analyze attendee sentiment for Global Innovation Summit 2026')" class="text-[11px] px-2.5 py-1 bg-white hover:bg-surface-container dark:bg-neutral-800 dark:hover:bg-neutral-750 border border-outline-variant dark:border-neutral-700/60 rounded text-on-surface dark:text-gray-300 font-semibold shadow-sm transition-colors text-left max-w-[260px] truncate">
+                            Analyze Summit Sentiment
+                        </button>
+                        <button onclick="sendQuickPrompt('Suggest pricing optimization for upcoming Workshops')" class="text-[11px] px-2.5 py-1 bg-white hover:bg-surface-container dark:bg-neutral-800 dark:hover:bg-neutral-750 border border-outline-variant dark:border-neutral-700/60 rounded text-on-surface dark:text-gray-300 font-semibold shadow-sm transition-colors text-left max-w-[260px] truncate">
+                            Optimize Workshop Prices
+                        </button>
+                    </div>
+
+                    <!-- Chat Input form -->
+                    <form id="chat-form" class="p-4 border-t border-outline-variant dark:border-neutral-800/60 flex gap-2 bg-surface-container-low dark:bg-neutral-900/80">
+                        <input type="text" id="chat-input" required autocomplete="off" placeholder="Ask Nexus anything about your portfolio..." class="flex-grow px-4 py-2.5 bg-surface dark:bg-neutral-850 border border-outline-variant dark:border-neutral-700/60 rounded text-body-sm text-on-surface focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/20 transition-all"/>
+                        <button type="submit" class="px-4 py-2.5 bg-violet-600 hover:bg-violet-750 text-white rounded font-label-md text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1 active:scale-[0.98]">
+                            <span>Send</span>
+                            <span class="material-symbols-outlined text-[16px]">send</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Insights Widget Panel (1/3) -->
+                <div class="space-y-stack-lg flex flex-col">
+                    
+                    <!-- Sentiment Gauge -->
+                    <section class="bg-surface-container-lowest dark:bg-neutral-900/40 border border-outline-variant dark:border-neutral-800/60 p-5 rounded-xl shadow-sm flex flex-col space-y-4">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="font-headline-sm text-xs font-bold text-on-surface dark:text-white uppercase tracking-wider">Sentiment Index</h4>
+                                <p class="text-[10px] text-on-surface-variant dark:text-gray-500">Combined attendee survey sentiment.</p>
+                            </div>
+                            <span class="material-symbols-outlined text-[20px] text-emerald-500">mood</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-baseline">
+                                <span class="text-3xl font-display-lg font-bold text-emerald-600 dark:text-emerald-400">8.9<span class="text-xs text-on-surface-variant dark:text-gray-500 font-semibold">/10</span></span>
+                                <span class="text-xs text-green-600 dark:text-green-400 font-semibold uppercase tracking-wider">Strongly Positive</span>
+                            </div>
+                            <div class="h-2.5 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                                <div class="h-full bg-emerald-500 rounded-full" style="width: 89%"></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Predictive Metrics -->
+                    <section class="bg-surface-container-lowest dark:bg-neutral-900/40 border border-outline-variant dark:border-neutral-800/60 p-5 rounded-xl shadow-sm flex flex-col space-y-4">
+                        <h4 class="font-headline-sm text-xs font-bold text-on-surface dark:text-white uppercase tracking-wider">Predictive Metrics</h4>
+                        <div class="space-y-3.5 text-xs text-on-surface dark:text-gray-300 font-semibold">
+                            <!-- Metric 1 -->
+                            <div class="flex justify-between items-center py-2 border-b border-outline-variant/40 dark:border-neutral-850">
+                                <span class="text-on-surface-variant dark:text-gray-400">Predicted Capacity Fill</span>
+                                <span class="text-violet-600 dark:text-violet-400">94.2%</span>
+                            </div>
+                            <!-- Metric 2 -->
+                            <div class="flex justify-between items-center py-2 border-b border-outline-variant/40 dark:border-neutral-850">
+                                <span class="text-on-surface-variant dark:text-gray-400">Conversion Velocity</span>
+                                <span class="text-emerald-600 dark:text-emerald-400">+14% / week</span>
+                            </div>
+                            <!-- Metric 3 -->
+                            <div class="flex justify-between items-center py-2">
+                                <span class="text-on-surface-variant dark:text-gray-400">Opt-out/Refund Rate</span>
+                                <span class="text-red-500">0.8%</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- AI Actions Feed -->
+                    <section class="bg-surface-container-lowest dark:bg-neutral-900/40 border border-outline-variant dark:border-neutral-800/60 rounded-xl shadow-sm flex flex-col flex-grow">
+                        <div class="p-4 border-b border-outline-variant dark:border-neutral-800/60 flex justify-between items-center">
+                            <h4 class="font-headline-sm text-xs font-bold text-on-surface dark:text-white uppercase tracking-wider">Nexus Advisory Recommendations</h4>
+                            <span class="material-symbols-outlined text-[18px] text-violet-500 animate-pulse">tips_and_updates</span>
+                        </div>
+                        <div class="p-4 divide-y divide-outline-variant/40 dark:divide-neutral-850 space-y-3.5 flex-grow">
+                            <!-- Rec 1 -->
+                            <div class="flex gap-3 pt-0 pb-3">
+                                <span class="material-symbols-outlined text-amber-500 text-[20px] flex-shrink-0">warning</span>
+                                <div class="text-xs space-y-1">
+                                    <p class="font-bold text-on-surface dark:text-white">Capacity Limitation Advisory</p>
+                                    <p class="text-on-surface-variant dark:text-gray-400 leading-normal">Global Innovation Summit is at 98% registered capacity. Recommend raising capacity by 50 or initiating a waitlist.</p>
+                                </div>
+                            </div>
+                            <!-- Rec 2 -->
+                            <div class="flex gap-3 pt-3.5 pb-3">
+                                <span class="material-symbols-outlined text-emerald-500 text-[20px] flex-shrink-0">trending_up</span>
+                                <div class="text-xs space-y-1">
+                                    <p class="font-bold text-on-surface dark:text-white">Price Optimization Assist</p>
+                                    <p class="text-on-surface-variant dark:text-gray-400 leading-normal">High speed registrations on "The UX Paradigm Shift". Recommend dynamic pricing bump of 10% for final spots.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Page Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatMessages = document.getElementById('chat-messages');
+            const chatForm = document.getElementById('chat-form');
+            const chatInput = document.getElementById('chat-input');
+            const clearChatBtn = document.getElementById('clear-chat-btn');
+
+            // Handle Chat Submit
+            chatForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const msg = chatInput.value.trim();
+                if (!msg) return;
+
+                appendUserMessage(msg);
+                chatInput.value = '';
+
+                // Simulate AI response
+                generateAIResponse(msg);
+            });
+
+            clearChatBtn.addEventListener('click', () => {
+                chatMessages.innerHTML = `
+                    <div class="flex gap-3 max-w-[85%]">
+                        <div class="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/40 text-violet-600 dark:text-violet-400 flex items-center justify-center flex-shrink-0">
+                            <span class="material-symbols-outlined text-[18px]">smart_toy</span>
+                        </div>
+                        <div class="bg-surface-container-low dark:bg-neutral-900 p-3 rounded-xl border border-outline-variant/40 dark:border-neutral-800 text-on-surface dark:text-gray-300 leading-relaxed">
+                            Conversation has been reset. What analysis can I perform on your event database?
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        // Quick Suggestion trigger
+        window.sendQuickPrompt = function(promptText) {
+            appendUserMessage(promptText);
+            generateAIResponse(promptText);
+        };
+
+        function appendUserMessage(text) {
+            const msgBox = document.getElementById('chat-messages');
+            const userMsg = document.createElement('div');
+            userMsg.className = "flex gap-3 max-w-[85%] ml-auto justify-end";
+            userMsg.innerHTML = `
+                <div class="bg-violet-600 text-white p-3 rounded-xl shadow-sm text-right leading-relaxed">
+                    ${text}
+                </div>
+            `;
+            msgBox.appendChild(userMsg);
+            scrollToBottom();
+        }
+
+        function generateAIResponse(query) {
+            const msgBox = document.getElementById('chat-messages');
+            
+            // Append Typing Indicator
+            const typingIndicator = document.createElement('div');
+            typingIndicator.className = "flex gap-3 max-w-[85%] ai-thinking-msg";
+            typingIndicator.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/40 text-violet-600 dark:text-violet-400 flex items-center justify-center flex-shrink-0">
+                    <span class="material-symbols-outlined text-[18px] animate-spin">sync</span>
+                </div>
+                <div class="bg-surface-container-low dark:bg-neutral-900 p-3 rounded-xl border border-outline-variant/40 dark:border-neutral-800 text-on-surface-variant dark:text-gray-500 italic">
+                    Nexus is analyzing...
+                </div>
+            `;
+            msgBox.appendChild(typingIndicator);
+            scrollToBottom();
+
+            // Formulate mock response text
+            let responseText = "Analyzing parameters... ";
+            const lowerQuery = query.toLowerCase();
+
+            if (lowerQuery.includes('sentiment') || lowerQuery.includes('summit')) {
+                responseText = "I have performed an audit on feedback logs for **Global Innovation Summit 2026**. \n\n" +
+                               "1. **Sentiment Index:** Score is **8.9 / 10** based on pre-event registration questionnaires.\n" +
+                               "2. **Top Interest Vectors:** 'Generative AI Workflows' (54%), 'Green Cloud Hosting' (32%), 'Edge Architectures' (14%).\n" +
+                               "3. **Advisory:** High attendee interest in hands-on workshops. Consider shifting the 2:00 PM panel into a live developer lab session.";
+            } else if (lowerQuery.includes('pricing') || lowerQuery.includes('price') || lowerQuery.includes('optimize')) {
+                responseText = "Comparing registration velocity with calendar margins. \n\n" +
+                               "1. **UX Paradigm Shift:** Currently at 88% capacity with 20 days remaining. Registration speed is twice the normal standard. **Dynamic Pricing Alert:** Raise final 20 tickets by **10%** (+$30 per ticket) to capture secondary demand.\n" +
+                               "2. **Networking Gatherings:** Maintain at current pricing (Free/Entry-only) to maximize community funnel metrics.";
+            } else {
+                responseText = "I have scanned your portfolio database. Here are the active statistics:\n\n" +
+                               "- **Active Registrations:** " + window.EC_DB.getEvents().reduce((sum, e) => sum + e.registrationsCount, 0) + " attendees registered.\n" +
+                               "- **High Capacity Events:** Global Innovation Summit 2026 (98% filled).\n" +
+                               "Ask me specific suggestions on pricing optimizations, attendee surveys, or to generate copy alerts.";
+            }
+
+            // Remove thinking indicator and write AI response with typewriter effect
+            setTimeout(() => {
+                typingIndicator.remove();
+
+                const aiContainer = document.createElement('div');
+                aiContainer.className = "flex gap-3 max-w-[85%]";
+                aiContainer.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/40 text-violet-600 dark:text-violet-400 flex items-center justify-center flex-shrink-0">
+                        <span class="material-symbols-outlined text-[18px]">smart_toy</span>
+                    </div>
+                    <div class="bg-surface-container-low dark:bg-neutral-900 p-3 rounded-xl border border-outline-variant/40 dark:border-neutral-800 text-on-surface dark:text-gray-300 leading-relaxed typing-cursor"></div>
+                `;
+                msgBox.appendChild(aiContainer);
+                scrollToBottom();
+
+                const bubble = aiContainer.querySelector('.typing-cursor');
+                let charIndex = 0;
+
+                function typeChar() {
+                    if (charIndex < responseText.length) {
+                        const char = responseText.charAt(charIndex);
+                        // Simple check to render line breaks as <br/>
+                        if (char === '\n') {
+                            bubble.innerHTML += '<br/>';
+                        } else {
+                            bubble.innerHTML += char;
+                        }
+                        charIndex++;
+                        scrollToBottom();
+                        setTimeout(typeChar, 8); // Very fast typing speed
+                    } else {
+                        bubble.classList.remove('typing-cursor'); // Remove cursor blink once finished
+                    }
+                }
+
+                typeChar();
+            }, 1000);
+        }
+
+        function scrollToBottom() {
+            const chatMessages = document.getElementById('chat-messages');
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    </script>
+    <script>
+        // Start shell nav
+        window.EC_Nav.renderShell('nexus');
+    </script>
+</body>
+</html>

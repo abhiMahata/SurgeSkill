@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>My Calendar | EventCommand</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-container": "#131b2e",
+                        "on-primary-container": "#7c839b",
+                        "on-surface": "#1b1b1d",
+                        "on-surface-variant": "#45464d",
+                        "surface": "#fcf8fa",
+                        "surface-container": "#f0edef",
+                        "surface-container-low": "#f6f3f5",
+                        "surface-container-lowest": "#ffffff",
+                        "outline-variant": "#c6c6cd",
+                        "outline": "#76777d",
+                        "primary": "#000000",
+                        "background": "#fcf8fa",
+                        "on-primary": "#ffffff"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "container-max": "1440px",
+                        "sidebar-width": "280px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "32px",
+                        "stack-sm": "8px",
+                        "stack-md": "16px",
+                        "stack-lg": "24px"
+                    },
+                    fontFamily: {
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "body-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "label-md": ["Inter"]
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .calendar-cell {
+            min-height: 100px;
+        }
+    </style>
+    <!-- Import shared scripts -->
+    <script src="../assets/js/db.js"></script>
+    <script src="../assets/js/nav.js"></script>
+</head>
+<body class="bg-[#fcf8fa] dark:bg-[#0b0c10] text-[#1b1b1d] dark:text-[#c5c6c7] font-body-md min-h-screen flex transition-colors duration-200">
+
+    <!-- Shell Sidebar -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content Wrapper -->
+    <div class="flex-grow md:pl-sidebar-width flex flex-col min-h-screen">
+        <!-- Shell Header -->
+        <div id="header-container"></div>
+
+        <!-- Toast Notification -->
+        <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 bg-neutral-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 transition-all duration-300 pointer-events-none">
+            <span class="material-symbols-outlined text-green-400">check_circle</span>
+            <span id="toast-text">Success message</span>
+        </div>
+
+        <!-- Main Content Canvas -->
+        <main class="flex-grow p-margin-mobile md:p-margin-desktop max-w-container-max w-full mx-auto space-y-stack-lg flex flex-col justify-between">
+            
+            <!-- Page Header + Navigation -->
+            <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div>
+                    <h2 class="font-headline-lg text-3xl font-bold tracking-tight text-on-surface dark:text-white">My Calendar</h2>
+                    <p class="text-body-sm text-on-surface-variant dark:text-gray-400">Review schedule slots, event details, and synchronize session dates.</p>
+                </div>
+                <div class="flex items-center bg-surface-container-lowest dark:bg-neutral-900 border border-outline-variant dark:border-neutral-800/80 rounded p-1 shadow-sm gap-1">
+                    <button id="prev-month-btn" class="p-1.5 rounded hover:bg-surface-container text-on-surface flex items-center justify-center">
+                        <span class="material-symbols-outlined text-[20px]">chevron_left</span>
+                    </button>
+                    <span id="calendar-month-indicator" class="px-3 font-headline-sm text-sm font-bold text-on-surface dark:text-white uppercase tracking-wider text-center min-w-[120px]">May 2026</span>
+                    <button id="next-month-btn" class="p-1.5 rounded hover:bg-surface-container text-on-surface flex items-center justify-center">
+                        <span class="material-symbols-outlined text-[20px]">chevron_right</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Calendar Container Card -->
+            <section class="bg-surface-container-lowest dark:bg-neutral-900/40 border border-outline-variant dark:border-neutral-800/60 rounded-xl shadow-sm overflow-hidden flex-grow flex flex-col">
+                
+                <!-- Day Names Header -->
+                <div class="grid grid-cols-7 border-b border-outline-variant dark:border-neutral-800 bg-surface-container-low dark:bg-neutral-900/80 text-center font-label-md text-[11px] text-on-surface-variant dark:text-gray-500 uppercase font-semibold py-3 tracking-wider">
+                    <div>Sun</div>
+                    <div>Mon</div>
+                    <div>Tue</div>
+                    <div>Wed</div>
+                    <div>Thu</div>
+                    <div>Fri</div>
+                    <div>Sat</div>
+                </div>
+
+                <!-- Days Grid -->
+                <div class="grid grid-cols-7 divide-x divide-y divide-outline-variant/60 dark:divide-neutral-800/40 bg-surface-container dark:bg-neutral-950 flex-grow" id="calendar-days-grid">
+                    <!-- Populated dynamically by JS -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Event Detail Popover Modal -->
+    <div id="detail-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-container-lowest dark:bg-neutral-900 border border-outline-variant dark:border-neutral-800/85 p-stack-lg rounded-xl shadow-2xl max-w-sm w-full space-y-4">
+            <div class="flex justify-between items-start">
+                <span id="detail-badge" class="px-2.5 py-0.5 rounded text-[10px] font-bold text-white uppercase bg-violet-600">Conference</span>
+                <button id="close-detail-btn" class="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface">
+                    <span class="material-symbols-outlined text-[20px]">close</span>
+                </button>
+            </div>
+            <div class="space-y-2">
+                <h4 class="font-headline-sm text-lg font-bold text-on-surface dark:text-white" id="detail-title">Event Title</h4>
+                <p class="text-body-sm text-[13px] text-on-surface-variant dark:text-gray-400" id="detail-desc">Event description content goes here.</p>
+            </div>
+            
+            <div class="space-y-2 pt-2 border-t border-outline-variant/40 dark:border-neutral-800">
+                <div class="flex items-center gap-2 text-body-sm text-[12px] text-on-surface-variant dark:text-gray-400">
+                    <span class="material-symbols-outlined text-[16px] text-violet-500">calendar_today</span>
+                    <span id="detail-date">Date here</span>
+                </div>
+                <div class="flex items-center gap-2 text-body-sm text-[12px] text-on-surface-variant dark:text-gray-400">
+                    <span class="material-symbols-outlined text-[16px] text-violet-500">location_on</span>
+                    <span id="detail-venue">Venue here</span>
+                </div>
+                <div class="flex items-center gap-2 text-body-sm text-[12px] text-on-surface-variant dark:text-gray-400">
+                    <span class="material-symbols-outlined text-[16px] text-violet-500">sell</span>
+                    <span id="detail-price">Price here</span>
+                </div>
+            </div>
+
+            <!-- Footer Action Buttons -->
+            <div class="pt-4 border-t border-outline-variant/40 dark:border-neutral-800 flex gap-2 justify-end">
+                <button id="btn-cancel-reg" class="px-4 py-2 bg-red-150 hover:bg-red-200 border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 rounded text-label-md text-xs font-bold transition-all active:scale-[0.98]">Unregister</button>
+                <button id="close-modal-ok" class="px-4 py-2 bg-surface hover:bg-surface-container dark:bg-neutral-800 dark:hover:bg-neutral-700/80 border border-outline-variant dark:border-neutral-700/60 text-on-surface dark:text-white rounded text-label-md text-xs font-bold transition-all">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page Logic -->
+    <script>
+        let currentYear = 2026;
+        let currentMonth = 4; // May (0-indexed: January is 0, May is 4)
+
+        const monthNames = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCalendar();
+
+            // Calendar Month Navigation
+            document.getElementById('prev-month-btn').addEventListener('click', () => {
+                currentMonth--;
+                if (currentMonth < 0) {
+                    currentMonth = 11;
+                    currentYear--;
+                }
+                renderCalendar();
+            });
+
+            document.getElementById('next-month-btn').addEventListener('click', () => {
+                currentMonth++;
+                if (currentMonth > 11) {
+                    currentMonth = 0;
+                    currentYear++;
+                }
+                renderCalendar();
+            });
+
+            // Close Modal
+            document.getElementById('close-detail-btn').onclick = closeDetailModal;
+            document.getElementById('close-modal-ok').onclick = closeDetailModal;
+        });
+
+        function renderCalendar() {
+            // Update calendar month year indicator
+            document.getElementById('calendar-month-indicator').innerText = `${monthNames[currentMonth]} ${currentYear}`;
+
+            const grid = document.getElementById('calendar-days-grid');
+            grid.innerHTML = '';
+
+            // Calculate grid properties
+            const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+            const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
+            const prevLastDate = new Date(currentYear, currentMonth, 0).getDate();
+
+            const user = window.EC_DB.getCurrentUser();
+            const events = window.EC_DB.getEvents();
+
+            // Render Previous Month Padding Days
+            for (let x = firstDayIndex; x > 0; x--) {
+                const day = prevLastDate - x + 1;
+                const cell = document.createElement('div');
+                cell.className = "calendar-cell p-2 bg-surface-container-low dark:bg-neutral-900/20 text-on-surface-variant dark:text-gray-600 opacity-40 font-label-md text-xs";
+                cell.innerHTML = `<span>${day}</span>`;
+                grid.appendChild(cell);
+            }
+
+            // Render Current Month Days
+            for (let i = 1; i <= lastDate; i++) {
+                const cell = document.createElement('div');
+                cell.className = "calendar-cell p-2 bg-surface-container-lowest dark:bg-neutral-900/60 hover:bg-surface-container-low dark:hover:bg-neutral-900/90 transition-colors flex flex-col justify-between font-label-md text-xs border-outline-variant/40 dark:border-neutral-800/40 relative";
+                
+                // Format day date string
+                const currentMonthStr = String(currentMonth + 1).padStart(2, '0');
+                const dayStr = String(i).padStart(2, '0');
+                const dateKey = `${currentYear}-${currentMonthStr}-${dayStr}`;
+
+                // Filter events that fall on this day
+                const dayEvents = events.filter(e => {
+                    const isRegistered = user ? user.registeredEvents.includes(e.id) : false;
+                    const isAdmin = user ? user.role === 'admin' : false;
+                    // For admins, show ALL events. For users, show only REGISTERED events on calendar.
+                    return e.date === dateKey && (isRegistered || isAdmin);
+                });
+
+                let eventBarsHtml = '<div class="space-y-1 mt-2">';
+                dayEvents.forEach(e => {
+                    let barColor = "bg-violet-600 text-white dark:bg-violet-750 border border-violet-500/20";
+                    if (e.status === 'Cancelled') barColor = "bg-red-600 text-white dark:bg-red-950/60 border border-red-500/20";
+                    else if (e.status === 'Draft') barColor = "bg-gray-400 text-white dark:bg-neutral-700 border border-neutral-600/20";
+
+                    eventBarsHtml += `
+                        <button onclick="openDetailModal('${e.id}', event)" class="w-full text-left truncate text-[10px] py-1 px-1.5 rounded font-bold shadow-sm active:scale-95 transition-all ${barColor}">
+                            ${e.title}
+                        </button>
+                    `;
+                });
+                eventBarsHtml += '</div>';
+
+                cell.innerHTML = `
+                    <span class="text-on-surface dark:text-gray-400 font-semibold">${i}</span>
+                    ${eventBarsHtml}
+                `;
+                grid.appendChild(cell);
+            }
+
+            // Render Next Month Padding Days
+            const totalCells = grid.children.length;
+            const remainingCells = 35 - totalCells;
+            const cellsToRender = remainingCells < 0 ? 42 - totalCells : remainingCells;
+
+            for (let j = 1; j <= cellsToRender; j++) {
+                const cell = document.createElement('div');
+                cell.className = "calendar-cell p-2 bg-surface-container-low dark:bg-neutral-900/20 text-on-surface-variant dark:text-gray-600 opacity-40 font-label-md text-xs";
+                cell.innerHTML = `<span>${j}</span>`;
+                grid.appendChild(cell);
+            }
+        }
+
+        window.openDetailModal = function(id, event) {
+            if (event) event.stopPropagation();
+
+            const e = window.EC_DB.getEventById(id);
+            if (!e) return;
+
+            const modal = document.getElementById('detail-modal');
+            const user = window.EC_DB.getCurrentUser();
+
+            // Populate Modal Content
+            document.getElementById('detail-badge').innerText = e.type;
+            document.getElementById('detail-title').innerText = e.title;
+            document.getElementById('detail-desc').innerText = e.description;
+            document.getElementById('detail-date').innerText = formatDate(e.date);
+            document.getElementById('detail-venue').innerText = e.venue;
+            document.getElementById('detail-price').innerText = `Registration fee: ${e.price}`;
+
+            // Configure Register Button
+            const cancelBtn = document.getElementById('btn-cancel-reg');
+            const isRegistered = user ? user.registeredEvents.includes(e.id) : false;
+
+            if (isRegistered) {
+                cancelBtn.classList.remove('hidden');
+                cancelBtn.onclick = () => {
+                    window.EC_DB.toggleEventRegistration(e.id);
+                    showToast('Registration cancelled.');
+                    closeDetailModal();
+                    renderCalendar();
+                };
+            } else {
+                // If it is admin viewing, or they are not registered
+                cancelBtn.classList.add('hidden');
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        window.closeDetailModal = function() {
+            const modal = document.getElementById('detail-modal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        };
+
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toast-text');
+            toastText.innerText = message;
+            
+            toast.classList.remove('translate-y-10', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-10', 'opacity-0');
+            }, 3000);
+        }
+    </script>
+    <script>
+        // Start shell nav
+        window.EC_Nav.renderShell('calendar');
+    </script>
+</body>
+</html>
