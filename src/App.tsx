@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppShell } from './components/Layout/AppShell';
 
 // Auth
+import { LandingPage } from './pages/LandingPage';
 import { GatewayPage } from './pages/LoginRegistration/Gateway';
 import { UserPortal }  from './pages/LoginRegistration/UserPortal';
 import { AdminPortal } from './pages/LoginRegistration/AdminPortal';
@@ -24,7 +25,8 @@ const App: React.FC = () => (
   <Router>
       <Routes>
         {/* Public */}
-        <Route path="/"            element={<GatewayPage />} />
+        <Route path="/"            element={<LandingPage />} />
+        <Route path="/gateway"     element={<GatewayPage />} />
         <Route path="/login/user"  element={<UserPortal />} />
         <Route path="/login/admin" element={<AdminPortal />} />
 

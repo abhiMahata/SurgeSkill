@@ -87,7 +87,7 @@ export const AdminPortal: React.FC = () => {
       {/* Right */}
       <div className="auth-form-side">
         <div className="auth-form-wrap">
-          <button onClick={() => navigate('/')} className="btn btn-ghost btn-sm" style={{ marginBottom: 28, paddingLeft: 0 }}>
+          <button onClick={() => navigate('/gateway')} className="btn btn-ghost btn-sm" style={{ marginBottom: 28, paddingLeft: 0 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
             Back
           </button>
