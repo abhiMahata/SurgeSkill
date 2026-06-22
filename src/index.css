@@ -1,0 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Fragment+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased font-sans;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight text-foreground;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/20 backdrop-blur-md border border-white/30 shadow-sm;
+  }
+}
