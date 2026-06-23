@@ -1,39 +1,44 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import type { EventItem } from '../../context/AppContext';
+import type { EventItem, Hackathon, Course } from '../../types';
 
 interface Msg { id: string; role: 'ai' | 'user'; text: string; streaming?: boolean }
 
 const PROMPTS = [
-  'Summarize registration analytics for all events',
-  'Which events are at full capacity?',
-  'Suggest a pricing strategy for the next workshop',
-  'Show revenue projections across my portfolio',
+  'Which courses have the most enrollments?',
+  'Show upcoming hackathons',
+  'Summarize registration analytics for events',
+  'What is the overall engagement across all content?',
 ];
 
-function generateReply(q: string, events: EventItem[]): string {
+function generateReply(q: string, events: EventItem[], hackathons: Hackathon[], courses: Course[]): string {
   const lower = q.toLowerCase();
-  const totalRegs = events.reduce((s, e) => s + e.registrationsCount, 0);
-  const totalCap  = events.reduce((s, e) => s + e.capacity, 0);
-  const fillPct   = totalCap > 0 ? ((totalRegs / totalCap) * 100).toFixed(1) : '0';
-  const revenue   = events.reduce((s, e) => {
-    if (e.price === 'Free' || !e.price.startsWith('$')) return s;
-    return s + parseInt(e.price.replace('$', ''), 10) * e.registrationsCount;
-  }, 0);
-  const full = events.filter(e => e.registrationsCount >= e.capacity);
+  
+  const evRegs = events.reduce((s, e) => s + e.registrationsCount, 0);
+  const evCap  = events.reduce((s, e) => s + e.capacity, 0);
+  
+  const hackRegs = hackathons.reduce((s, h) => s + h.registrationsCount, 0);
+  const hackCap  = hackathons.reduce((s, h) => s + h.capacity, 0);
+  
+  const courseRegs = courses.reduce((s, c) => s + c.enrolledCount, 0);
+  const courseCap  = courses.reduce((s, c) => s + c.capacity, 0);
 
-  if (lower.includes('capacity') || lower.includes('full')) {
-    return full.length === 0
-      ? 'No events are currently at full capacity. All events have available spots.'
-      : `**Events at full capacity:**\n\n${full.map(e => `• ${e.title} — ${e.registrationsCount}/${e.capacity}`).join('\n')}\n\nConsider expanding capacity or enabling a waitlist for these events.`;
+  if (lower.includes('course') && lower.includes('enrollment')) {
+    const sorted = [...courses].sort((a, b) => b.enrolledCount - a.enrolledCount).slice(0, 3);
+    if (sorted.length === 0) return 'No courses available.';
+    return `**Top Enrolled Courses:**\n\n${sorted.map(c => `• ${c.title} — ${c.enrolledCount}/${c.capacity} enrolled`).join('\n')}\n\nThese courses are driving the most engagement.`;
   }
-  if (lower.includes('pric') || lower.includes('strategy')) {
-    return `**Pricing Recommendations:**\n\n• The UX Paradigm Shift is at 88% capacity — consider a 10–15% price increase for the remaining seats.\n• Free networking events drive community growth; keep them free.\n• For premium conferences at <60% fill: offer early-bird discounts 3 weeks out.\n\nEstimated uplift from dynamic pricing: **$800–$1,200**.`;
+  if (lower.includes('hackathon')) {
+    const upcoming = hackathons.filter(h => h.status === 'Upcoming');
+    if (upcoming.length === 0) return 'There are no upcoming hackathons currently scheduled.';
+    return `**Upcoming Hackathons:**\n\n${upcoming.map(h => `• ${h.title} (${h.mode}) — ${h.registrationsCount}/${h.capacity} registered`).join('\n')}\n\nConsider running an email campaign to boost registrations.`;
   }
-  if (lower.includes('revenue') || lower.includes('projection')) {
-    return `**Revenue Overview:**\n\n• Confirmed revenue from paid registrations: **$${revenue.toLocaleString()}**\n• Total registrations: ${totalRegs.toLocaleString()} of ${totalCap.toLocaleString()} capacity\n• Average fill rate: **${fillPct}%**\n\nProjected final revenue (assuming current velocity): **$${Math.round(revenue * 1.15).toLocaleString()}**.`;
+  if (lower.includes('event')) {
+    return `**Event Analytics:**\n\n• **Total Events:** ${events.length}\n• **Total Registrations:** ${evRegs.toLocaleString()} of ${evCap.toLocaleString()} capacity\n• **Fill Rate:** ${evCap > 0 ? Math.round((evRegs/evCap)*100) : 0}%\n\nLet me know if you want to drill down into specific events.`;
   }
-  return `**Portfolio Summary:**\n\n• **Total events:** ${events.length}\n• **Total registrations:** ${totalRegs.toLocaleString()} / ${totalCap.toLocaleString()} capacity\n• **Fill rate:** ${fillPct}%\n• **Projected revenue:** $${revenue.toLocaleString()}\n• **Events at capacity:** ${full.length}\n\nAsk me about pricing, capacity, or specific events for deeper analysis.`;
+  
+  const totalEng = evRegs + hackRegs + courseRegs;
+  return `**Platform Snapshot:**\n\n• **Total Engagement:** ${totalEng.toLocaleString()} users across all content\n• **Events:** ${events.length} (${evRegs} registered)\n• **Hackathons:** ${hackathons.length} (${hackRegs} registered)\n• **Courses:** ${courses.length} (${courseRegs} enrolled)\n\nAsk me about specific courses, hackathons, or events for deeper analysis.`;
 }
 
 function renderMd(text: string) {
@@ -43,10 +48,10 @@ function renderMd(text: string) {
 }
 
 export const NexusAI: React.FC = () => {
-  const { events } = useApp();
+  const { events, hackathons, courses } = useApp();
   const [msgs, setMsgs]     = useState<Msg[]>([{
     id: 'welcome', role: 'ai',
-    text: "Hi, I'm **Nexus AI** — your event intelligence assistant. I have full access to your event portfolio. Ask me about registrations, revenue, capacity, or pricing recommendations.",
+    text: "Hi, I'm **Nexus AI** — your community intelligence assistant. I have full access to courses, hackathons, and events. Ask me about engagement, enrollments, or analytics.",
   }]);
   const [input, setInput]   = useState('');
   const [busy, setBusy]     = useState(false);
@@ -62,7 +67,7 @@ export const NexusAI: React.FC = () => {
     setBusy(true);
 
     setTimeout(() => {
-      const reply = generateReply(text, events);
+      const reply = generateReply(text, events, hackathons, courses);
       const id = `a${Date.now()}`;
       setMsgs(p => [...p, { id, role: 'ai', text: '', streaming: true }]);
       setBusy(false);
@@ -80,6 +85,8 @@ export const NexusAI: React.FC = () => {
     }, 700);
   };
 
+  const totalEng = events.reduce((s, e) => s + e.registrationsCount, 0) + hackathons.reduce((s, h) => s + h.registrationsCount, 0) + courses.reduce((s, c) => s + c.enrolledCount, 0);
+
   return (
     <div style={{ maxWidth: 1060 }}>
       <div className="page-header">
@@ -91,7 +98,7 @@ export const NexusAI: React.FC = () => {
               Online
             </span>
           </div>
-          <p className="page-desc">Event intelligence assistant — analytics, pricing, and insights on demand.</p>
+          <p className="page-desc">Community intelligence assistant — analytics, insights, and engagement tracking.</p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={() => setMsgs([{ id: 'r', role: 'ai', text: 'Conversation cleared. How can I help?' }])}>
           Clear chat
@@ -139,7 +146,7 @@ export const NexusAI: React.FC = () => {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
-              placeholder="Ask Nexus about your events…"
+              placeholder="Ask Nexus about your community…"
               disabled={busy}
               style={{
                 flex: 1, padding: '8px 12px', fontSize: 13.5,
@@ -192,17 +199,13 @@ export const NexusAI: React.FC = () => {
           {/* Portfolio snapshot */}
           <div className="card">
             <div className="card-header" style={{ padding: '12px 16px' }}>
-              <div className="card-title" style={{ fontSize: 13 }}>Portfolio snapshot</div>
+              <div className="card-title" style={{ fontSize: 13 }}>Platform snapshot</div>
             </div>
             <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { l: 'Total events', v: events.length },
-                { l: 'Registrations', v: events.reduce((s, e) => s + e.registrationsCount, 0).toLocaleString() },
-                { l: 'Fill rate', v: (() => {
-                  const c = events.reduce((s, e) => s + e.capacity, 0);
-                  const r = events.reduce((s, e) => s + e.registrationsCount, 0);
-                  return c > 0 ? `${Math.round((r/c)*100)}%` : '0%';
-                })() },
+                { l: 'Total Content', v: events.length + hackathons.length + courses.length },
+                { l: 'Engagement', v: totalEng.toLocaleString() },
+                { l: 'Communities', v: 'Active' },
               ].map(row => (
                 <div key={row.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{row.l}</span>

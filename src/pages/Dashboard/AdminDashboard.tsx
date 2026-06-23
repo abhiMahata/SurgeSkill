@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import type { EventItem, ActivityLog } from '../../context/AppContext';
+import type { EventItem, Hackathon, Course, ActivityLog } from '../../types';
 
 const statusBadge = (s: string) => {
   const m: Record<string, string> = {
@@ -9,6 +9,9 @@ const statusBadge = (s: string) => {
     Completed: 'badge badge-gray',
     Draft:     'badge badge-amber',
     Cancelled: 'badge badge-red',
+    Upcoming:  'badge badge-blue',
+    Live:      'badge badge-green',
+    Active:    'badge badge-green',
   };
   return m[s] ?? 'badge badge-gray';
 };
@@ -16,30 +19,36 @@ const statusBadge = (s: string) => {
 const statusColor = (s: string) => ({
   Confirmed: 'var(--green)', Completed: 'var(--text-muted)',
   Draft: 'var(--amber)', Cancelled: 'var(--red)',
+  Upcoming: 'var(--blue)', Live: 'var(--green)', Active: 'var(--green)'
 }[s] ?? 'var(--text-muted)');
 
 export const AdminDashboard: React.FC = () => {
-  const { currentUser, events, activities, showToast } = useApp();
+  const { currentUser, events, hackathons, courses, activities, showToast } = useApp();
   const navigate = useNavigate();
 
-  const totalRegs = events.reduce((s: number, e: EventItem) => s + e.registrationsCount, 0);
-  const totalCap  = events.reduce((s: number, e: EventItem) => s + e.capacity, 0);
-  const fillPct   = totalCap > 0 ? Math.round((totalRegs / totalCap) * 100) : 0;
-  const revenue   = events.reduce((s: number, e: EventItem) => {
-    if (e.price === 'Free' || !e.price.startsWith('$')) return s;
-    return s + parseInt(e.price.replace('$',''), 10) * e.registrationsCount;
-  }, 0);
+  // If mentor, show only their content; if admin, show all
+  const isAdmin = currentUser?.role === 'admin';
+  const myEvents = isAdmin ? events : events.filter(e => e.createdBy === currentUser?.id);
+  const myHacks = isAdmin ? hackathons : hackathons.filter(h => h.createdBy === currentUser?.id);
+  const myCourses = isAdmin ? courses : courses.filter(c => c.createdBy === currentUser?.id);
+
+  const totalEventRegs = myEvents.reduce((s, e) => s + e.registrationsCount, 0);
+  const totalHackRegs = myHacks.reduce((s, h) => s + h.registrationsCount, 0);
+  const totalCourseEnrolls = myCourses.reduce((s, c) => s + c.enrolledCount, 0);
+  
+  const totalEngagement = totalEventRegs + totalHackRegs + totalCourseEnrolls;
 
   const handleExport = () => {
+    // Just a simple export for events to keep it working
     const csv = [
-      'ID,Title,Date,Venue,Capacity,Registrations,Price,Status',
-      ...events.map((e: EventItem) =>
-        `"${e.id}","${e.title}","${e.date}","${e.venue}",${e.capacity},${e.registrationsCount},"${e.price}","${e.status}"`
-      )
+      'ID,Title,Type,Date,Registrations,Capacity,Status',
+      ...myEvents.map(e => `"${e.id}","${e.title}","Event","${e.date}",${e.registrationsCount},${e.capacity},"${e.status}"`),
+      ...myHacks.map(h => `"${h.id}","${h.title}","Hackathon","${h.date}",${h.registrationsCount},${h.capacity},"${h.status}"`),
+      ...myCourses.map(c => `"${c.id}","${c.title}","Course","",${c.enrolledCount},${c.capacity},"${c.status}"`)
     ].join('\n');
     const a = document.createElement('a');
     a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
-    a.download = `surgeskills-${Date.now()}.csv`;
+    a.download = `surgeskill-export-${Date.now()}.csv`;
     a.click();
     showToast('Exported to CSV');
   };
@@ -49,7 +58,7 @@ export const AdminDashboard: React.FC = () => {
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Admin Dashboard</h1>
+          <h1 className="page-title">{isAdmin ? 'Admin Console' : 'Mentor Dashboard'}</h1>
           <p className="page-desc">{currentUser?.name} · {currentUser?.designation}</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -59,7 +68,7 @@ export const AdminDashboard: React.FC = () => {
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/manage')}>
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-            New event
+            Manage Content
           </button>
         </div>
       </div>
@@ -67,24 +76,24 @@ export const AdminDashboard: React.FC = () => {
       {/* Stats */}
       <div className="stat-strip">
         <div className="stat-cell">
-          <div className="stat-label">Total Events</div>
-          <div className="stat-value">{events.length}</div>
-          <div className="stat-sub">in portfolio</div>
+          <div className="stat-label">Total Engagement</div>
+          <div className="stat-value">{totalEngagement.toLocaleString()}</div>
+          <div className="stat-sub">across all content</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-label">Registrations</div>
-          <div className="stat-value">{totalRegs.toLocaleString()}</div>
-          <div className="stat-sub">of {totalCap.toLocaleString()} capacity</div>
+          <div className="stat-label">Events</div>
+          <div className="stat-value">{myEvents.length}</div>
+          <div className="stat-sub">{totalEventRegs} registered</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-label">Fill Rate</div>
-          <div className="stat-value">{fillPct}%</div>
-          <div className="stat-sub">average</div>
+          <div className="stat-label">Hackathons</div>
+          <div className="stat-value">{myHacks.length}</div>
+          <div className="stat-sub">{totalHackRegs} registered</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-label">Revenue</div>
-          <div className="stat-value">${revenue.toLocaleString()}</div>
-          <div className="stat-sub">projected</div>
+          <div className="stat-label">Courses</div>
+          <div className="stat-value">{myCourses.length}</div>
+          <div className="stat-sub">{totalCourseEnrolls} enrolled</div>
         </div>
       </div>
 
@@ -92,75 +101,43 @@ export const AdminDashboard: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20 }}>
         {/* Left col */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Fill rate bars */}
+          
+          {/* Recent Content */}
           <div className="card">
             <div className="card-header">
               <div>
-                <div className="card-title">Registration Analytics</div>
-                <div className="card-subtitle">Fill rate by event</div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/manage')}>
-                Manage
-                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_forward</span>
-              </button>
-            </div>
-            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {events.slice(0, 5).map((ev: EventItem) => {
-                const pct = ev.capacity > 0 ? Math.round((ev.registrationsCount / ev.capacity) * 100) : 0;
-                const barClass = pct >= 90 ? 'green' : pct >= 60 ? '' : 'amber';
-                return (
-                  <div key={ev.id}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7, alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text-primary)' }}>{ev.title}</span>
-                        <span className={statusBadge(ev.status)}>{ev.status}</span>
-                      </div>
-                      <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                        {ev.registrationsCount}/{ev.capacity} <span style={{ fontWeight: 600, color: statusColor(ev.status) }}>({pct}%)</span>
-                      </span>
-                    </div>
-                    <div className="progress">
-                      <div className={`progress-fill ${barClass}`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Events table */}
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <div className="card-title">Event Portfolio</div>
-                <div className="card-subtitle">{events.length} events</div>
+                <div className="card-title">Content Overview</div>
+                <div className="card-subtitle">Recent events, hackathons, and courses</div>
               </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table">
                 <thead>
                   <tr>
-                    {['Event', 'Date', 'Type', 'Fill', 'Price', 'Status'].map(h => (
-                      <th key={h}>{h}</th>
-                    ))}
+                    {['Content', 'Type', 'Engagement', 'Status'].map(h => <th key={h}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {events.slice(0, 6).map((ev: EventItem) => {
-                    const pct = ev.capacity > 0 ? Math.round((ev.registrationsCount / ev.capacity) * 100) : 0;
+                  {[
+                    ...myEvents.map(e => ({ ...e, _type: 'Event', _eng: e.registrationsCount })),
+                    ...myHacks.map(h => ({ ...h, _type: 'Hackathon', _eng: h.registrationsCount })),
+                    ...myCourses.map(c => ({ ...c, _type: 'Course', _eng: c.enrolledCount }))
+                  ]
+                  .sort((a, b) => b._eng - a._eng)
+                  .slice(0, 8)
+                  .map((item: any) => {
+                    const pct = item.capacity > 0 ? Math.round((item._eng / item.capacity) * 100) : 0;
                     return (
-                      <tr key={ev.id}>
+                      <tr key={item.id}>
                         <td>
-                          <span style={{ fontWeight: 500, display: 'block', maxWidth: 180 }} className="truncate">{ev.title}</span>
+                          <span style={{ fontWeight: 500, display: 'block', maxWidth: 220 }} className="truncate">{item.title}</span>
                         </td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{new Date(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                        <td><span className="badge badge-gray">{ev.type}</span></td>
+                        <td><span className="badge badge-gray">{item._type}</span></td>
                         <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                           <span style={{ fontWeight: 600 }}>{pct}%</span>
-                          <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 4 }}>({ev.registrationsCount}/{ev.capacity})</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 4 }}>({item._eng}/{item.capacity})</span>
                         </td>
-                        <td style={{ fontWeight: 600 }}>{ev.price}</td>
-                        <td><span className={statusBadge(ev.status)}>{ev.status}</span></td>
+                        <td><span className={statusBadge(item.status)}>{item.status}</span></td>
                       </tr>
                     );
                   })}

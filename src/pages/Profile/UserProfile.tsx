@@ -63,7 +63,18 @@ export const UserProfile: React.FC = () => {
 
   const [name, setName]   = useState(currentUser?.name ?? '');
   const [desig, setDesig] = useState(currentUser?.designation ?? '');
-  const [org, setOrg]     = useState(currentUser?.organization ?? '');
+  
+  // Student fields
+  const [college, setCollege] = useState(currentUser?.college ?? currentUser?.organization ?? '');
+  const [dept, setDept]       = useState(currentUser?.department ?? '');
+  const [year, setYear]       = useState(currentUser?.yearOfStudy ?? '');
+  const [phone, setPhone]     = useState(currentUser?.phone ?? '');
+  
+  // Mentor fields
+  const [org, setOrg]         = useState(currentUser?.organization ?? '');
+  const [expertise, setExpertise] = useState(currentUser?.expertise ?? '');
+  const [linkedin, setLinkedin]   = useState(currentUser?.linkedin ?? '');
+
   const [newPw, setNewPw] = useState('');
   const [confPw, setConfPw] = useState('');
 
@@ -71,7 +82,13 @@ export const UserProfile: React.FC = () => {
 
   const saveInfo = (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = updateProfile({ name, designation: desig, organization: org });
+    let data: any = { name, designation: desig };
+    if (currentUser.role === 'student') {
+      data = { ...data, college, organization: college, department: dept, yearOfStudy: year, phone };
+    } else {
+      data = { ...data, organization: org, expertise, linkedin };
+    }
+    const ok = updateProfile(data);
     if (ok) showToast('Profile updated');
   };
 
@@ -96,25 +113,25 @@ export const UserProfile: React.FC = () => {
         {/* Left — identity */}
         <div className="card" style={{ padding: '24px 20px', textAlign: 'center', position: 'sticky', top: 68 }}>
           <img
-            src={currentUser.role === 'admin'
+            src={currentUser.photoURL || (currentUser.role === 'admin' || currentUser.role === 'mentor'
               ? 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=facearea&facepad=3&w=128&h=128'
-              : 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=facearea&facepad=3&w=128&h=128'}
+              : 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=facearea&facepad=3&w=128&h=128')}
             alt={currentUser.name}
             style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)', marginBottom: 12 }}
           />
           <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{currentUser.name}</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>{currentUser.designation}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>{currentUser.organization}</div>
-          <span className={`badge ${currentUser.role === 'admin' ? 'badge-black' : 'badge-gray'}`} style={{ textTransform: 'capitalize' }}>
+          <span className={`badge ${currentUser.role === 'admin' ? 'badge-black' : currentUser.role === 'mentor' ? 'badge-purple' : 'badge-blue'}`} style={{ textTransform: 'capitalize' }}>
             {currentUser.role}
           </span>
 
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', textAlign: 'left' }}>
             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 10 }}>Account</div>
             {[
-              { l: 'Email',     v: currentUser.email },
-              { l: 'User ID',   v: currentUser.id },
-              { l: 'Registered', v: `${currentUser.registeredEvents.length} events` },
+              { l: 'Email',      v: currentUser.email },
+              { l: 'User ID',    v: currentUser.id },
+              { l: 'Communities',v: `${currentUser.joinedCommunities?.length || 0} joined` },
             ].map(r => (
               <div key={r.l} style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{r.l}</div>
@@ -132,7 +149,7 @@ export const UserProfile: React.FC = () => {
             <div className="card-header">
               <div>
                 <div className="card-title">Personal Information</div>
-                <div className="card-subtitle">Update your name and professional details</div>
+                <div className="card-subtitle">Update your profile details</div>
               </div>
             </div>
             <div className="card-body">
@@ -140,8 +157,22 @@ export const UserProfile: React.FC = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
                   <Field label="Full Name"    value={name}  onChange={setName}  autoComplete="off" />
                   <Field label="Email"        value={currentUser.email} onChange={() => {}} disabled />
-                  <Field label="Designation"  value={desig} onChange={setDesig} autoComplete="off" />
-                  <Field label="Organization" value={org}   onChange={setOrg}   autoComplete="off" />
+                  
+                  {currentUser.role === 'student' ? (
+                    <>
+                      <Field label="College / University" value={college} onChange={setCollege} autoComplete="off" />
+                      <Field label="Department" value={dept} onChange={setDept} autoComplete="off" />
+                      <Field label="Year of Study" value={year} onChange={setYear} autoComplete="off" placeholder="e.g. 3rd Year" />
+                      <Field label="Phone" value={phone} onChange={setPhone} autoComplete="off" type="tel" />
+                    </>
+                  ) : (
+                    <>
+                      <Field label="Designation"  value={desig} onChange={setDesig} autoComplete="off" />
+                      <Field label="Organization" value={org}   onChange={setOrg}   autoComplete="off" />
+                      <Field label="Expertise" value={expertise} onChange={setExpertise} autoComplete="off" placeholder="e.g. Full-Stack Dev" />
+                      <Field label="LinkedIn" value={linkedin} onChange={setLinkedin} autoComplete="off" type="url" />
+                    </>
+                  )}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button type="submit" className="btn btn-primary">Save changes</button>
@@ -171,25 +202,6 @@ export const UserProfile: React.FC = () => {
             </div>
           </div>
 
-          {/* Account metadata */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Account Details</div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, padding: 0 }}>
-              {[
-                { l: 'User ID',     v: currentUser.id },
-                { l: 'Role',        v: currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) },
-                { l: 'Email',       v: currentUser.email },
-                { l: 'Registered',  v: `${currentUser.registeredEvents.length} events` },
-              ].map(f => (
-                <div key={f.l} style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 4 }}>{f.l}</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{f.v}</div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

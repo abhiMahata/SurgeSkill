@@ -40,8 +40,6 @@ export const UserDashboard: React.FC = () => {
   const myCourses = courses.filter((c: Course) => enCourseIds.includes(c.id));
   const myHacks = hackathons.filter((h: Hackathon) => regHackIds.includes(h.id));
 
-  const regIds = currentUser?.registeredEvents ?? [];
-  const myEvents = events.filter((e: EventItem) => regIds.includes(e.id));
   const upcoming = myEvents.filter((e: EventItem) => new Date(e.date) > new Date() && e.status !== 'Completed' && e.status !== 'Cancelled');
   const completed = myEvents.filter((e: EventItem) => e.status === 'Completed' || new Date(e.date) < new Date());
   const nextEvent = upcoming.sort((a: EventItem, b: EventItem) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
