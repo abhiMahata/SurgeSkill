@@ -26,18 +26,18 @@ export const GatewayPage: React.FC = () => {
         {/* Copy */}
         <div className="auth-panel-content">
           <p style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>
-            Event Intelligence Platform
+            Student-Led Learning Community
           </p>
           <h1 style={{ fontFamily: 'Inter', fontSize: 38, fontWeight: 800, color: '#fff', lineHeight: 1.1, letterSpacing: '-0.025em', marginBottom: 20 }}>
-            Master the art of<br />event orchestration.
+            Learn, teach, and<br />grow together.
           </h1>
           <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', lineHeight: 1.75, maxWidth: 360 }}>
-            The enterprise command center built for high-stakes event directors — precision analytics, seamless registration, and AI-powered insights.
+            A community-driven platform connecting mentors and students through courses, hackathons, events, and collaborative learning.
           </p>
 
           {/* Stats */}
           <div style={{ display: 'flex', gap: 36, marginTop: 40 }}>
-            {[['500+', 'Global Events'], ['40K+', 'Attendees'], ['98%', 'Satisfaction']].map(([v, l]) => (
+            {[['200+', 'Active Courses'], ['5K+', 'Students'], ['150+', 'Mentors']].map(([v, l]) => (
               <div key={l}>
                 <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1 }}>{v}</div>
                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>{l}</div>
@@ -84,8 +84,8 @@ export const GatewayPage: React.FC = () => {
                 <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-primary)' }}>person</span>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Attendee Portal</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Browse events, register, manage your schedule</div>
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Student Portal</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Browse courses, join hackathons, connect with peers</div>
               </div>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-muted)' }}>arrow_forward</span>
             </button>
@@ -108,8 +108,8 @@ export const GatewayPage: React.FC = () => {
                 <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-primary)' }}>shield_person</span>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Admin Portal</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Create events, manage analytics, full control</div>
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Mentor Portal</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Teach courses, host hackathons, build community</div>
               </div>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-muted)' }}>arrow_forward</span>
             </button>
@@ -119,7 +119,7 @@ export const GatewayPage: React.FC = () => {
           <div className="info-box" style={{ marginTop: 24, marginBottom: 0 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>info</span>
             <div>
-              <strong>Demo:</strong> user@company.com / <code>user</code> &nbsp;|&nbsp; admin@company.com / <code>admin</code> &nbsp;·&nbsp; Key: <code>EC-ADM-2026</code>
+              <strong>Demo:</strong> student@surgeskill.com / <code>student</code> &nbsp;|&nbsp; mentor@surgeskill.com / <code>mentor</code>
             </div>
           </div>
         </div>

@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppShell } from './components/Layout/AppShell';
 
 // Auth
-import { LandingPage } from './pages/LandingPage';
 import { GatewayPage } from './pages/LoginRegistration/Gateway';
 import { UserPortal }  from './pages/LoginRegistration/UserPortal';
 import { AdminPortal } from './pages/LoginRegistration/AdminPortal';
@@ -12,9 +11,13 @@ import { AdminPortal } from './pages/LoginRegistration/AdminPortal';
 import { UserDashboard }  from './pages/Dashboard/UserDashboard';
 import { AdminDashboard } from './pages/Dashboard/AdminDashboard';
 
-// Events
-import { ExploreEvents } from './pages/Events/ExploreEvents';
-import { ManageEvents }  from './pages/Events/ManageEvents';
+// Explore & Manage
+import { ExploreAll }     from './pages/Explore/ExploreAll';
+import { ManageContent }  from './pages/Manage/ManageContent';
+
+// Community
+import { Communities }    from './pages/Community/Communities';
+import { CommunityChat }  from './pages/Community/CommunityChat';
 
 // Other
 import { MyCalendar } from './pages/Calendar/MyCalendar';
@@ -25,7 +28,7 @@ const App: React.FC = () => (
   <Router>
       <Routes>
         {/* Public */}
-        <Route path="/"            element={<LandingPage />} />
+        <Route path="/"            element={<GatewayPage />} />
         <Route path="/gateway"     element={<GatewayPage />} />
         <Route path="/login/user"  element={<UserPortal />} />
         <Route path="/login/admin" element={<AdminPortal />} />
@@ -33,8 +36,10 @@ const App: React.FC = () => (
         {/* Protected — wrapped in AppShell */}
         <Route path="/dashboard/user"  element={<AppShell><UserDashboard /></AppShell>} />
         <Route path="/dashboard/admin" element={<AppShell><AdminDashboard /></AppShell>} />
-        <Route path="/explore"         element={<AppShell><ExploreEvents /></AppShell>} />
-        <Route path="/manage"          element={<AppShell><ManageEvents /></AppShell>} />
+        <Route path="/explore"         element={<AppShell><ExploreAll /></AppShell>} />
+        <Route path="/manage"          element={<AppShell><ManageContent /></AppShell>} />
+        <Route path="/communities"     element={<AppShell><Communities /></AppShell>} />
+        <Route path="/communities/:id" element={<AppShell><CommunityChat /></AppShell>} />
         <Route path="/calendar"        element={<AppShell><MyCalendar /></AppShell>} />
         <Route path="/profile"         element={<AppShell><UserProfile /></AppShell>} />
         <Route path="/nexus"           element={<AppShell><NexusAI /></AppShell>} />

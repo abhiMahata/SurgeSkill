@@ -1,438 +1,488 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import {
+  onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  signInWithPopup, signOut, updateProfile as fbUpdateProfile,
+} from 'firebase/auth';
+import {
+  doc, getDoc, setDoc, updateDoc, collection, getDocs, onSnapshot,
+  addDoc, deleteDoc, query, orderBy, limit, serverTimestamp, increment,
+  writeBatch,
+} from 'firebase/firestore';
+import { auth, db, googleProvider } from '../firebase';
+import type {
+  User, UserRole, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage,
+} from '../types';
+import { DEFAULT_EVENTS, DEFAULT_HACKATHONS, DEFAULT_COURSES } from '../utils/seedData';
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'user' | 'admin';
-  designation: string;
-  organization: string;
-  registeredEvents: string[];
-}
+// Re-export types for backward compatibility
+export type { User, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage };
 
-export interface EventItem {
-  id: string;
-  title: string;
-  date: string;
-  venue: string;
-  capacity: number;
-  price: string;
-  image: string;
-  description: string;
-  type: string;
-  registrationsCount: number;
-  status: 'Confirmed' | 'Draft' | 'Cancelled' | 'Completed';
-}
-
-export interface ActivityLog {
-  timestamp: string;
-  date: string;
-  action: string;
-}
-
+/* ──────────────────────────────────────────────────────────────────────
+   CONTEXT TYPE
+   ────────────────────────────────────────────────────────────────── */
 interface AppContextType {
+  // Auth
   currentUser: User | null;
-  events: EventItem[];
-  activities: ActivityLog[];
-  theme: 'light' | 'dark';
-  toast: { message: string; visible: boolean };
-  showToast: (message: string) => void;
-  login: (email: string, password: string, role: 'user' | 'admin') => { success: boolean; message: string };
-  register: (name: string, email: string, password: string, role: 'user' | 'admin') => { success: boolean; message: string };
+  authLoading: boolean;
+  login: (email: string, password: string, role: UserRole) => Promise<{ success: boolean; message: string }>;
+  register: (name: string, email: string, password: string, role: UserRole, extra?: Partial<User>) => Promise<{ success: boolean; message: string }>;
+  loginWithGoogle: (role: UserRole) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
-  toggleEventRegistration: (id: string) => { success: boolean; registered: boolean };
-  createEvent: (eventData: Omit<EventItem, 'id' | 'registrationsCount' | 'status'>) => void;
-  updateEvent: (id: string, eventData: Partial<EventItem>) => void;
+  updateProfile: (data: Partial<User> & { password?: string }) => Promise<boolean>;
+
+  // Events
+  events: EventItem[];
+  createEvent: (data: Omit<EventItem, 'id' | 'registrationsCount' | 'status'>) => Promise<void>;
+  updateEvent: (id: string, data: Partial<EventItem>) => void;
   deleteEvent: (id: string) => void;
-  setTheme: (theme: 'light' | 'dark') => void;
-  updateProfile: (profileData: { name?: string; designation?: string; organization?: string; password?: string }) => boolean;
+  toggleEventRegistration: (id: string) => { success: boolean; registered: boolean };
+
+  // Hackathons
+  hackathons: Hackathon[];
+  createHackathon: (data: Omit<Hackathon, 'id' | 'registrationsCount' | 'status'>) => Promise<void>;
+  updateHackathon: (id: string, data: Partial<Hackathon>) => void;
+  deleteHackathon: (id: string) => void;
+  toggleHackathonRegistration: (id: string) => { success: boolean; registered: boolean };
+
+  // Courses
+  courses: Course[];
+  createCourse: (data: Omit<Course, 'id' | 'enrolledCount' | 'status'>) => Promise<void>;
+  updateCourse: (id: string, data: Partial<Course>) => void;
+  deleteCourse: (id: string) => void;
+  toggleCourseEnrollment: (id: string) => { success: boolean; enrolled: boolean };
+
+  // Communities
+  communities: Community[];
+  createCommunity: (data: Omit<Community, 'id' | 'memberIds'>) => Promise<string>;
+  joinCommunity: (id: string) => void;
+  leaveCommunity: (id: string) => void;
+
+  // Activities & UI
+  activities: ActivityLog[];
   addActivity: (action: string) => void;
+  theme: 'light' | 'dark';
+  setTheme: (t: 'light' | 'dark') => void;
+  toast: { message: string; visible: boolean };
+  showToast: (msg: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const DEFAULT_EVENTS: EventItem[] = [
-  {
-    id: 'gis-2024',
-    title: 'Global Innovation Summit 2026',
-    date: '2026-05-22',
-    description: 'Join industry leaders for an immersive experience in the future of AI and sustainable technology architecture.',
-    venue: 'Moscone Center South, San Francisco',
-    capacity: 500,
-    price: '$299',
-    image: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80',
-    type: 'Conference',
-    registrationsCount: 489,
-    status: 'Confirmed'
-  },
-  {
-    id: 'ux-paradigm',
-    title: 'The UX Paradigm Shift',
-    date: '2026-05-28',
-    description: 'Learn the new methodologies for building high-conversion spatial layouts in spatial computing and modern UI schemas.',
-    venue: 'Metropolitan Pavilion, New York',
-    capacity: 150,
-    price: '$99',
-    image: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=800&q=80',
-    type: 'Workshop',
-    registrationsCount: 132,
-    status: 'Confirmed'
-  },
-  {
-    id: 'tech-tea',
-    title: 'Networking: Tech & Tea',
-    date: '2026-06-05',
-    description: 'An informal gathering of engineers, organizers, and developers looking to share ideas and projects.',
-    venue: 'Prestige Hall, Chicago',
-    capacity: 100,
-    price: 'Free',
-    image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=800&q=80',
-    type: 'Networking',
-    registrationsCount: 45,
-    status: 'Confirmed'
-  },
-  {
-    id: 'data-arch-2025',
-    title: 'Data Architecture 2025',
-    date: '2025-10-15',
-    description: 'Understanding real-time analytics stream sync protocols, Apache Kafka clusters, and modern distributed storage layers.',
-    venue: 'Silicon Center, San Jose',
-    capacity: 300,
-    price: '$199',
-    image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80',
-    type: 'Conference',
-    registrationsCount: 300,
-    status: 'Completed'
-  },
-  {
-    id: 'prod-strategy-sync',
-    title: 'Product Strategy Sync',
-    date: '2025-12-08',
-    description: 'Annual gathering of product leads discussing outcome-based roadmapping and high-density interface metrics.',
-    venue: 'Hybrid / Silicon Valley',
-    capacity: 80,
-    price: 'Free',
-    image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=800&q=80',
-    type: 'Workshop',
-    registrationsCount: 80,
-    status: 'Completed'
-  }
-];
+/* ──────────────────────────────────────────────────────────────────────
+   HELPER: detect if Firebase is configured
+   ────────────────────────────────────────────────────────────────── */
+function isFirebaseConfigured(): boolean {
+  try {
+    return auth.app.options.apiKey !== 'YOUR_API_KEY';
+  } catch { return false; }
+}
 
+/* ──────────────────────────────────────────────────────────────────────
+   PROVIDER
+   ────────────────────────────────────────────────────────────────── */
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load initial databases
-  const [users, setUsers] = useState<any[]>(() => {
-    const data = localStorage.getItem('ec_users');
-    if (data) return JSON.parse(data);
-    const defaults = [
-      {
-        id: 'user-sarah',
-        name: 'Sarah Jenkins',
-        email: 'user@company.com',
-        password: 'user',
-        role: 'user',
-        designation: 'Senior Product Designer',
-        organization: 'DesignSystems Inc.',
-        registeredEvents: ['gis-2024']
-      },
-      {
-        id: 'admin-alex',
-        name: 'Alex Rivera',
-        email: 'admin@company.com',
-        password: 'admin',
-        role: 'admin',
-        designation: 'Executive Director',
-        organization: 'EventCommand Inc.',
-        registeredEvents: []
-      }
-    ];
-    localStorage.setItem('ec_users', JSON.stringify(defaults));
-    return defaults;
-  });
+  const fbReady = isFirebaseConfigured();
 
-  const [events, setEvents] = useState<EventItem[]>(() => {
-    const data = localStorage.getItem('ec_events');
-    if (data) return JSON.parse(data);
-    localStorage.setItem('ec_events', JSON.stringify(DEFAULT_EVENTS));
-    return DEFAULT_EVENTS;
-  });
-
-  const [activities, setActivities] = useState<ActivityLog[]>(() => {
-    const data = localStorage.getItem('ec_activities');
-    return data ? JSON.parse(data) : [];
-  });
-
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const email = sessionStorage.getItem('ec_current_user');
-    if (email) {
-      const storedUsers = localStorage.getItem('ec_users');
-      if (storedUsers) {
-        const found = JSON.parse(storedUsers).find((u: any) => u.email === email);
-        if (found) {
-          return {
-            id: found.id,
-            name: found.name,
-            email: found.email,
-            role: found.role,
-            designation: found.designation,
-            organization: found.organization,
-            registeredEvents: found.registeredEvents || []
-          };
-        }
-      }
-    }
-    return null;
-  });
-
-  const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
-    const stored = localStorage.getItem('ec_theme') as 'light' | 'dark';
-    return stored || 'light';
-  });
-
+  // ── State ───────────────────────────────────────────────────────
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [hackathons, setHackathons] = useState<Hackathon[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [communities, setCommunities] = useState<Community[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [theme, setThemeState] = useState<'light' | 'dark'>(() =>
+    (localStorage.getItem('ss_theme') as 'light' | 'dark') || 'light');
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
 
-  const showToast = (message: string) => {
+  const showToast = useCallback((message: string) => {
     setToast({ message, visible: true });
-    setTimeout(() => {
-      setToast(prev => ({ ...prev, visible: false }));
-    }, 3000);
-  };
+    setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000);
+  }, []);
 
-  // Apply theme class to document
-  useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-      root.classList.remove('light');
-    } else {
-      root.classList.add('light');
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('ec_theme', theme);
-  }, [theme]);
-
-  const addActivity = (action: string) => {
+  const addActivity = useCallback((action: string) => {
     const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    const log: ActivityLog = { timestamp: timeStr, date: dateStr, action };
-
+    const log: ActivityLog = {
+      timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: now.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+      action,
+    };
+    if (fbReady) {
+      addDoc(collection(db, 'activities'), { ...log, ts: Date.now() }).catch(() => {});
+    }
     setActivities(prev => {
       const updated = [log, ...prev];
-      localStorage.setItem('ec_activities', JSON.stringify(updated));
+      if (!fbReady) localStorage.setItem('ss_activities', JSON.stringify(updated));
       return updated;
     });
-  };
+  }, [fbReady]);
 
-  const login = (email: string, password: string, role: 'user' | 'admin') => {
-    const matched = users.find(u => u.email === email && u.role === role);
-    if (!matched) {
-      return { success: false, message: 'Invalid credentials or incorrect role access.' };
+  // ── Theme ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('dark', theme === 'dark');
+    root.classList.toggle('light', theme === 'light');
+    localStorage.setItem('ss_theme', theme);
+  }, [theme]);
+  const setTheme = (t: 'light' | 'dark') => setThemeState(t);
+
+  // ── Seed + Load Data ────────────────────────────────────────────
+  const seedLocalData = useCallback(() => {
+    const e = localStorage.getItem('ss_events');
+    if (!e) { localStorage.setItem('ss_events', JSON.stringify(DEFAULT_EVENTS)); setEvents(DEFAULT_EVENTS); }
+    else setEvents(JSON.parse(e));
+
+    const h = localStorage.getItem('ss_hackathons');
+    if (!h) { localStorage.setItem('ss_hackathons', JSON.stringify(DEFAULT_HACKATHONS)); setHackathons(DEFAULT_HACKATHONS); }
+    else setHackathons(JSON.parse(h));
+
+    const c = localStorage.getItem('ss_courses');
+    if (!c) { localStorage.setItem('ss_courses', JSON.stringify(DEFAULT_COURSES)); setCourses(DEFAULT_COURSES); }
+    else setCourses(JSON.parse(c));
+
+    const cm = localStorage.getItem('ss_communities');
+    if (cm) setCommunities(JSON.parse(cm));
+
+    const a = localStorage.getItem('ss_activities');
+    if (a) setActivities(JSON.parse(a));
+  }, []);
+
+  const seedFirestore = useCallback(async () => {
+    const snap = await getDocs(collection(db, 'events'));
+    if (snap.empty) {
+      const batch = writeBatch(db);
+      DEFAULT_EVENTS.forEach(ev => batch.set(doc(db, 'events', ev.id), ev));
+      DEFAULT_HACKATHONS.forEach(h => batch.set(doc(db, 'hackathons', h.id), h));
+      DEFAULT_COURSES.forEach(c => batch.set(doc(db, 'courses', c.id), c));
+      await batch.commit();
     }
-    if (matched.password !== password) {
-      return { success: false, message: 'Invalid credentials.' };
+  }, []);
+
+  // ── Firebase Auth Listener ──────────────────────────────────────
+  useEffect(() => {
+    if (!fbReady) {
+      seedLocalData();
+      // Load user from session
+      const email = sessionStorage.getItem('ss_current_user');
+      if (email) {
+        const users = JSON.parse(localStorage.getItem('ss_users') || '[]');
+        const found = users.find((u: any) => u.email === email);
+        if (found) setCurrentUser(found);
+      }
+      setAuthLoading(false);
+      return;
     }
 
-    sessionStorage.setItem('ec_current_user', email);
-    setCurrentUser({
-      id: matched.id,
-      name: matched.name,
-      email: matched.email,
-      role: matched.role,
-      designation: matched.designation,
-      organization: matched.organization,
-      registeredEvents: matched.registeredEvents || []
+    seedFirestore();
+
+    // Listen to collections
+    const unsubs: (() => void)[] = [];
+    unsubs.push(onSnapshot(collection(db, 'events'), s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as EventItem)))));
+    unsubs.push(onSnapshot(collection(db, 'hackathons'), s => setHackathons(s.docs.map(d => ({ id: d.id, ...d.data() } as Hackathon)))));
+    unsubs.push(onSnapshot(collection(db, 'courses'), s => setCourses(s.docs.map(d => ({ id: d.id, ...d.data() } as Course)))));
+    unsubs.push(onSnapshot(collection(db, 'communities'), s => setCommunities(s.docs.map(d => ({ id: d.id, ...d.data() } as Community)))));
+    unsubs.push(onSnapshot(query(collection(db, 'activities'), orderBy('ts', 'desc'), limit(50)), s =>
+      setActivities(s.docs.map(d => d.data() as ActivityLog))));
+
+    const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+        if (userDoc.exists()) {
+          setCurrentUser({ id: fbUser.uid, ...userDoc.data() } as User);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+      setAuthLoading(false);
     });
 
-    addActivity(`${matched.name} logged into ${role} portal`);
-    return { success: true, message: 'Success' };
+    return () => { unsubAuth(); unsubs.forEach(u => u()); };
+  }, [fbReady, seedLocalData, seedFirestore]);
+
+  // ── Helper: save local users ────────────────────────────────────
+  const getLocalUsers = () => JSON.parse(localStorage.getItem('ss_users') || '[]');
+  const saveLocalUsers = (u: any[]) => localStorage.setItem('ss_users', JSON.stringify(u));
+  const persistLocal = (key: string, data: any) => localStorage.setItem(key, JSON.stringify(data));
+
+  // ── Auth: Login ─────────────────────────────────────────────────
+  const login = async (email: string, password: string, role: UserRole) => {
+    if (!fbReady) {
+      const users = getLocalUsers();
+      const matched = users.find((u: any) => u.email === email && u.role === role);
+      if (!matched) return { success: false, message: 'Invalid credentials or incorrect role.' };
+      if (matched.password !== password) return { success: false, message: 'Invalid credentials.' };
+      sessionStorage.setItem('ss_current_user', email);
+      const { password: _, ...safe } = matched;
+      setCurrentUser(safe);
+      addActivity(`${matched.name} logged into ${role} portal`);
+      return { success: true, message: 'Success' };
+    }
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+      if (!userDoc.exists()) return { success: false, message: 'User profile not found.' };
+      const data = userDoc.data() as any;
+      if (data.role !== role) return { success: false, message: `This account is registered as ${data.role}, not ${role}.` };
+      setCurrentUser({ id: cred.user.uid, ...data });
+      addActivity(`${data.name} logged into ${role} portal`);
+      return { success: true, message: 'Success' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Login failed.' };
+    }
   };
 
-  const register = (name: string, email: string, password: string, role: 'user' | 'admin') => {
-    if (users.some(u => u.email === email)) {
-      return { success: false, message: 'Corporate email is already registered in our database.' };
-    }
-
-    const newUser = {
-      id: `${role}-${Date.now()}`,
-      name,
-      email,
-      password,
-      role,
-      designation: role === 'admin' ? 'Coordinator Lead' : 'Partner Associate',
-      organization: role === 'admin' ? 'EventCommand Corp' : 'Corporate Partner',
-      registeredEvents: []
+  // ── Auth: Register ──────────────────────────────────────────────
+  const register = async (name: string, email: string, password: string, role: UserRole, extra?: Partial<User>) => {
+    const profile: Omit<User, 'id'> = {
+      name, email, role,
+      designation: role === 'mentor' ? 'Mentor' : role === 'admin' ? 'Administrator' : 'Student',
+      organization: extra?.organization || extra?.college || '',
+      registeredEvents: [], enrolledCourses: [], registeredHackathons: [], joinedCommunities: [],
+      college: extra?.college || '', department: extra?.department || '',
+      yearOfStudy: extra?.yearOfStudy || '', phone: extra?.phone || '',
+      studentId: extra?.studentId || '', expertise: extra?.expertise || '',
+      linkedin: extra?.linkedin || '',
     };
 
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    localStorage.setItem('ec_users', JSON.stringify(updatedUsers));
-
-    sessionStorage.setItem('ec_current_user', email);
-    setCurrentUser({
-      id: newUser.id,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      designation: newUser.designation,
-      organization: newUser.organization,
-      registeredEvents: []
-    });
-
-    addActivity(`${name} registered coordinator profile`);
-    return { success: true, message: 'Success' };
-  };
-
-  const logout = () => {
-    if (currentUser) {
-      addActivity(`${currentUser.name} logged out`);
+    if (!fbReady) {
+      const users = getLocalUsers();
+      if (users.some((u: any) => u.email === email)) return { success: false, message: 'Email already registered.' };
+      const newUser = { ...profile, id: `${role}-${Date.now()}`, password };
+      saveLocalUsers([...users, newUser]);
+      sessionStorage.setItem('ss_current_user', email);
+      const { password: _, ...safe } = newUser as any;
+      setCurrentUser(safe);
+      addActivity(`${name} registered as ${role}`);
+      return { success: true, message: 'Success' };
     }
-    sessionStorage.removeItem('ec_current_user');
-    setCurrentUser(null);
-  };
-
-  const toggleEventRegistration = (id: string) => {
-    if (!currentUser) return { success: false, registered: false };
-
-    let isRegistered = false;
-    const updatedUsers = users.map(u => {
-      if (u.id === currentUser.id) {
-        const eventsList = u.registeredEvents || [];
-        if (eventsList.includes(id)) {
-          u.registeredEvents = eventsList.filter((eid: string) => eid !== id);
-          isRegistered = false;
-        } else {
-          u.registeredEvents = [...eventsList, id];
-          isRegistered = true;
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      await fbUpdateProfile(cred.user, { displayName: name });
+      await setDoc(doc(db, 'users', cred.user.uid), profile);
+      setCurrentUser({ id: cred.user.uid, ...profile });
+      addActivity(`${name} registered as ${role}`);
+      // Auto-create/join college community
+      if (profile.college && role === 'student') {
+        const existing = communities.find(c => c.type === 'college' && c.college === profile.college);
+        if (!existing) {
+          const cRef = await addDoc(collection(db, 'communities'), {
+            name: `${profile.college} Community`, description: `Official community for students from ${profile.college}`,
+            type: 'college', college: profile.college, memberIds: [cred.user.uid], createdBy: cred.user.uid, image: '',
+          });
         }
       }
-      return u;
-    });
-
-    setUsers(updatedUsers);
-    localStorage.setItem('ec_users', JSON.stringify(updatedUsers));
-
-    // Update currentUser state
-    setCurrentUser(prev => prev ? { ...prev, registeredEvents: updatedUsers.find(u => u.id === prev.id).registeredEvents } : null);
-
-    // Update registrations count in event list
-    const updatedEvents = events.map(ev => {
-      if (ev.id === id) {
-        return {
-          ...ev,
-          registrationsCount: isRegistered ? ev.registrationsCount + 1 : Math.max(0, ev.registrationsCount - 1)
-        };
-      }
-      return ev;
-    });
-
-    setEvents(updatedEvents);
-    localStorage.setItem('ec_events', JSON.stringify(updatedEvents));
-
-    addActivity(`${currentUser.name} ${isRegistered ? 'registered for' : 'unregistered from'} event ${id}`);
-    return { success: true, registered: isRegistered };
-  };
-
-  const createEvent = (eventData: Omit<EventItem, 'id' | 'registrationsCount' | 'status'>) => {
-    const newEvent: EventItem = {
-      ...eventData,
-      id: `ev-${Date.now()}`,
-      registrationsCount: 0,
-      status: 'Confirmed',
-      image: eventData.image || 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&w=800&q=80'
-    };
-
-    const updated = [...events, newEvent];
-    setEvents(updated);
-    localStorage.setItem('ec_events', JSON.stringify(updated));
-    addActivity(`Created new event "${eventData.title}"`);
-  };
-
-  const updateEvent = (id: string, eventData: Partial<EventItem>) => {
-    const updated = events.map(ev => {
-      if (ev.id === id) {
-        return { ...ev, ...eventData };
-      }
-      return ev;
-    });
-
-    setEvents(updated);
-    localStorage.setItem('ec_events', JSON.stringify(updated));
-    addActivity(`Updated event params for "${events.find(ev => ev.id === id)?.title}"`);
-  };
-
-  const deleteEvent = (id: string) => {
-    const target = events.find(ev => ev.id === id);
-    const updated = events.filter(ev => ev.id !== id);
-    setEvents(updated);
-    localStorage.setItem('ec_events', JSON.stringify(updated));
-    
-    // Also remove registration links for all users
-    const updatedUsers = users.map(u => {
-      if (u.registeredEvents && u.registeredEvents.includes(id)) {
-        u.registeredEvents = u.registeredEvents.filter((eid: string) => eid !== id);
-      }
-      return u;
-    });
-    setUsers(updatedUsers);
-    localStorage.setItem('ec_users', JSON.stringify(updatedUsers));
-
-    if (currentUser) {
-      setCurrentUser(prev => prev ? { ...prev, registeredEvents: prev.registeredEvents.filter(eid => eid !== id) } : null);
+      return { success: true, message: 'Success' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Registration failed.' };
     }
-
-    addActivity(`Deleted event "${target?.title}" from database`);
   };
 
-  const updateProfile = (profileData: { name?: string; designation?: string; organization?: string; password?: string }) => {
-    if (!currentUser) return false;
-
-    const updatedUsers = users.map(u => {
-      if (u.id === currentUser.id) {
-        return { ...u, ...profileData };
+  // ── Auth: Google ────────────────────────────────────────────────
+  const loginWithGoogle = async (role: UserRole) => {
+    if (!fbReady) return { success: false, message: 'Google sign-in requires Firebase configuration.' };
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const uid = result.user.uid;
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        setCurrentUser({ id: uid, ...userDoc.data() } as User);
+        addActivity(`${result.user.displayName} logged in via Google`);
+        return { success: true, message: 'Success' };
       }
-      return u;
-    });
-
-    setUsers(updatedUsers);
-    localStorage.setItem('ec_users', JSON.stringify(updatedUsers));
-
-    setCurrentUser(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        name: profileData.name !== undefined ? profileData.name : prev.name,
-        designation: profileData.designation !== undefined ? profileData.designation : prev.designation,
-        organization: profileData.organization !== undefined ? profileData.organization : prev.organization
+      // First-time Google user — create profile
+      const profile: Omit<User, 'id'> = {
+        name: result.user.displayName || 'User', email: result.user.email || '',
+        role, designation: role === 'mentor' ? 'Mentor' : 'Student',
+        organization: '', registeredEvents: [], enrolledCourses: [],
+        registeredHackathons: [], joinedCommunities: [],
+        photoURL: result.user.photoURL || '',
       };
-    });
-
-    addActivity(`${currentUser.name} updated profile settings`);
-    return true;
+      await setDoc(doc(db, 'users', uid), profile);
+      setCurrentUser({ id: uid, ...profile });
+      addActivity(`${profile.name} registered via Google as ${role}`);
+      return { success: true, message: 'Success' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Google sign-in failed.' };
+    }
   };
 
-  const setTheme = (theme: 'light' | 'dark') => {
-    setThemeState(theme);
+  // ── Auth: Logout ────────────────────────────────────────────────
+  const logout = () => {
+    if (currentUser) addActivity(`${currentUser.name} logged out`);
+    if (fbReady) signOut(auth);
+    else { sessionStorage.removeItem('ss_current_user'); setCurrentUser(null); }
   };
 
+  // ── Auth: Update Profile ────────────────────────────────────────
+  const updateProfileFn = async (data: Partial<User> & { password?: string }) => {
+    if (!currentUser) return false;
+    if (!fbReady) {
+      const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, ...data } : u);
+      saveLocalUsers(users);
+      setCurrentUser(prev => prev ? { ...prev, ...data } : null);
+      addActivity(`${currentUser.name} updated profile`);
+      return true;
+    }
+    try {
+      const { password, ...rest } = data;
+      await updateDoc(doc(db, 'users', currentUser.id), rest as any);
+      setCurrentUser(prev => prev ? { ...prev, ...rest } : null);
+      addActivity(`${currentUser.name} updated profile`);
+      return true;
+    } catch { return false; }
+  };
+
+  // ── Events CRUD ─────────────────────────────────────────────────
+  const createEvent = async (data: Omit<EventItem, 'id' | 'registrationsCount' | 'status'>) => {
+    const ev: EventItem = { ...data, id: `ev-${Date.now()}`, registrationsCount: 0, status: 'Confirmed',
+      image: data.image || 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&w=800&q=80',
+      createdBy: currentUser?.id || '',
+    };
+    if (fbReady) { await setDoc(doc(db, 'events', ev.id), ev); }
+    else { const u = [...events, ev]; setEvents(u); persistLocal('ss_events', u); }
+    addActivity(`Created event "${data.title}"`);
+  };
+  const updateEvent = (id: string, data: Partial<EventItem>) => {
+    if (fbReady) { updateDoc(doc(db, 'events', id), data as any); }
+    else { const u = events.map(e => e.id === id ? { ...e, ...data } : e); setEvents(u); persistLocal('ss_events', u); }
+    addActivity(`Updated event "${events.find(e => e.id === id)?.title}"`);
+  };
+  const deleteEvent = (id: string) => {
+    const t = events.find(e => e.id === id);
+    if (fbReady) { deleteDoc(doc(db, 'events', id)); }
+    else { const u = events.filter(e => e.id !== id); setEvents(u); persistLocal('ss_events', u); }
+    addActivity(`Deleted event "${t?.title}"`);
+  };
+  const toggleEventRegistration = (id: string) => {
+    if (!currentUser) return { success: false, registered: false };
+    const isReg = currentUser.registeredEvents.includes(id);
+    const newList = isReg ? currentUser.registeredEvents.filter(e => e !== id) : [...currentUser.registeredEvents, id];
+    setCurrentUser(prev => prev ? { ...prev, registeredEvents: newList } : null);
+    if (fbReady) {
+      updateDoc(doc(db, 'users', currentUser.id), { registeredEvents: newList });
+      updateDoc(doc(db, 'events', id), { registrationsCount: increment(isReg ? -1 : 1) });
+    } else {
+      const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, registeredEvents: newList } : u);
+      saveLocalUsers(users);
+      const evs = events.map(e => e.id === id ? { ...e, registrationsCount: e.registrationsCount + (isReg ? -1 : 1) } : e);
+      setEvents(evs); persistLocal('ss_events', evs);
+    }
+    addActivity(`${currentUser.name} ${isReg ? 'left' : 'registered for'} event ${id}`);
+    return { success: true, registered: !isReg };
+  };
+
+  // ── Hackathons CRUD ─────────────────────────────────────────────
+  const createHackathon = async (data: Omit<Hackathon, 'id' | 'registrationsCount' | 'status'>) => {
+    const h: Hackathon = { ...data, id: `hack-${Date.now()}`, registrationsCount: 0, status: 'Upcoming', createdBy: currentUser?.id || '' };
+    if (fbReady) { await setDoc(doc(db, 'hackathons', h.id), h); }
+    else { const u = [...hackathons, h]; setHackathons(u); persistLocal('ss_hackathons', u); }
+    addActivity(`Created hackathon "${data.title}"`);
+  };
+  const updateHackathon = (id: string, data: Partial<Hackathon>) => {
+    if (fbReady) { updateDoc(doc(db, 'hackathons', id), data as any); }
+    else { const u = hackathons.map(h => h.id === id ? { ...h, ...data } : h); setHackathons(u); persistLocal('ss_hackathons', u); }
+  };
+  const deleteHackathon = (id: string) => {
+    if (fbReady) { deleteDoc(doc(db, 'hackathons', id)); }
+    else { const u = hackathons.filter(h => h.id !== id); setHackathons(u); persistLocal('ss_hackathons', u); }
+  };
+  const toggleHackathonRegistration = (id: string) => {
+    if (!currentUser) return { success: false, registered: false };
+    const isReg = currentUser.registeredHackathons.includes(id);
+    const newList = isReg ? currentUser.registeredHackathons.filter(e => e !== id) : [...currentUser.registeredHackathons, id];
+    setCurrentUser(prev => prev ? { ...prev, registeredHackathons: newList } : null);
+    if (fbReady) {
+      updateDoc(doc(db, 'users', currentUser.id), { registeredHackathons: newList });
+      updateDoc(doc(db, 'hackathons', id), { registrationsCount: increment(isReg ? -1 : 1) });
+    } else {
+      const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, registeredHackathons: newList } : u);
+      saveLocalUsers(users);
+      const hs = hackathons.map(h => h.id === id ? { ...h, registrationsCount: h.registrationsCount + (isReg ? -1 : 1) } : h);
+      setHackathons(hs); persistLocal('ss_hackathons', hs);
+    }
+    addActivity(`${currentUser.name} ${isReg ? 'left' : 'registered for'} hackathon ${id}`);
+    return { success: true, registered: !isReg };
+  };
+
+  // ── Courses CRUD ────────────────────────────────────────────────
+  const createCourse = async (data: Omit<Course, 'id' | 'enrolledCount' | 'status'>) => {
+    const c: Course = { ...data, id: `course-${Date.now()}`, enrolledCount: 0, status: 'Active', createdBy: currentUser?.id || '' };
+    if (fbReady) { await setDoc(doc(db, 'courses', c.id), c); }
+    else { const u = [...courses, c]; setCourses(u); persistLocal('ss_courses', u); }
+    addActivity(`Created course "${data.title}"`);
+  };
+  const updateCourse = (id: string, data: Partial<Course>) => {
+    if (fbReady) { updateDoc(doc(db, 'courses', id), data as any); }
+    else { const u = courses.map(c => c.id === id ? { ...c, ...data } : c); setCourses(u); persistLocal('ss_courses', u); }
+  };
+  const deleteCourse = (id: string) => {
+    if (fbReady) { deleteDoc(doc(db, 'courses', id)); }
+    else { const u = courses.filter(c => c.id !== id); setCourses(u); persistLocal('ss_courses', u); }
+  };
+  const toggleCourseEnrollment = (id: string) => {
+    if (!currentUser) return { success: false, enrolled: false };
+    const isEn = currentUser.enrolledCourses.includes(id);
+    const newList = isEn ? currentUser.enrolledCourses.filter(e => e !== id) : [...currentUser.enrolledCourses, id];
+    setCurrentUser(prev => prev ? { ...prev, enrolledCourses: newList } : null);
+    if (fbReady) {
+      updateDoc(doc(db, 'users', currentUser.id), { enrolledCourses: newList });
+      updateDoc(doc(db, 'courses', id), { enrolledCount: increment(isEn ? -1 : 1) });
+    } else {
+      const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, enrolledCourses: newList } : u);
+      saveLocalUsers(users);
+      const cs = courses.map(c => c.id === id ? { ...c, enrolledCount: c.enrolledCount + (isEn ? -1 : 1) } : c);
+      setCourses(cs); persistLocal('ss_courses', cs);
+    }
+    addActivity(`${currentUser.name} ${isEn ? 'left' : 'enrolled in'} course ${id}`);
+    return { success: true, enrolled: !isEn };
+  };
+
+  // ── Communities ─────────────────────────────────────────────────
+  const createCommunity = async (data: Omit<Community, 'id' | 'memberIds'>) => {
+    const c: Community = { ...data, id: `comm-${Date.now()}`, memberIds: [currentUser?.id || ''] };
+    if (fbReady) { const ref = await addDoc(collection(db, 'communities'), { ...c }); c.id = ref.id; }
+    else { const u = [...communities, c]; setCommunities(u); persistLocal('ss_communities', u); }
+    addActivity(`Created community "${data.name}"`);
+    return c.id;
+  };
+  const joinCommunity = (id: string) => {
+    if (!currentUser) return;
+    const comm = communities.find(c => c.id === id);
+    if (!comm || comm.memberIds.includes(currentUser.id)) return;
+    const updated = [...comm.memberIds, currentUser.id];
+    if (fbReady) { updateDoc(doc(db, 'communities', id), { memberIds: updated }); }
+    else {
+      const u = communities.map(c => c.id === id ? { ...c, memberIds: updated } : c);
+      setCommunities(u); persistLocal('ss_communities', u);
+    }
+    const newJoined = [...(currentUser.joinedCommunities || []), id];
+    setCurrentUser(prev => prev ? { ...prev, joinedCommunities: newJoined } : null);
+    if (fbReady) updateDoc(doc(db, 'users', currentUser.id), { joinedCommunities: newJoined });
+  };
+  const leaveCommunity = (id: string) => {
+    if (!currentUser) return;
+    const comm = communities.find(c => c.id === id);
+    if (!comm) return;
+    const updated = comm.memberIds.filter(m => m !== currentUser.id);
+    if (fbReady) { updateDoc(doc(db, 'communities', id), { memberIds: updated }); }
+    else {
+      const u = communities.map(c => c.id === id ? { ...c, memberIds: updated } : c);
+      setCommunities(u); persistLocal('ss_communities', u);
+    }
+    const newJoined = (currentUser.joinedCommunities || []).filter(c => c !== id);
+    setCurrentUser(prev => prev ? { ...prev, joinedCommunities: newJoined } : null);
+    if (fbReady) updateDoc(doc(db, 'users', currentUser.id), { joinedCommunities: newJoined });
+  };
+
+  // ── Provide ─────────────────────────────────────────────────────
   return (
     <AppContext.Provider value={{
-      currentUser,
-      events,
-      activities,
-      theme,
-      toast,
-      showToast,
-      login,
-      register,
-      logout,
-      toggleEventRegistration,
-      createEvent,
-      updateEvent,
-      deleteEvent,
-      setTheme,
-      updateProfile,
-      addActivity
+      currentUser, authLoading, login, register, loginWithGoogle, logout, updateProfile: updateProfileFn,
+      events, createEvent, updateEvent, deleteEvent, toggleEventRegistration,
+      hackathons, createHackathon, updateHackathon, deleteHackathon, toggleHackathonRegistration,
+      courses, createCourse, updateCourse, deleteCourse, toggleCourseEnrollment,
+      communities, createCommunity, joinCommunity, leaveCommunity,
+      activities, addActivity, theme, setTheme, toast, showToast,
     }}>
       {children}
     </AppContext.Provider>
@@ -440,9 +490,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 };
 
 export const useApp = () => {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
-  }
-  return context;
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp must be used within AppProvider');
+  return ctx;
 };

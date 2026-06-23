@@ -5,8 +5,9 @@ import { useApp } from '../../context/AppContext';
 const NAV: { label: string; icon: string; path: string; adminOnly?: boolean }[] = [
   { label: 'Dashboard',     icon: 'space_dashboard', path: 'dashboard' },
   { label: 'Explore',       icon: 'search',          path: '/explore' },
+  { label: 'Communities',   icon: 'groups',          path: '/communities' },
   { label: 'My Calendar',   icon: 'calendar_today',  path: '/calendar' },
-  { label: 'Manage Events', icon: 'tune',            path: '/manage',   adminOnly: true },
+  { label: 'Manage',        icon: 'tune',            path: '/manage',   adminOnly: true },
   { label: 'Nexus AI',      icon: 'auto_awesome',    path: '/nexus' },
 ];
 
@@ -33,7 +34,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const dashPath = currentUser.role === 'admin' ? '/dashboard/admin' : '/dashboard/user';
 
-  const navItems = NAV.filter(n => !n.adminOnly || currentUser.role === 'admin').map(n => ({
+  const navItems = NAV.filter(n => !n.adminOnly || currentUser.role === 'admin' || currentUser.role === 'mentor').map(n => ({
     ...n,
     path: n.path === 'dashboard' ? dashPath : n.path,
   }));
@@ -44,13 +45,14 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const pageTitle = (() => {
     const p = location.pathname;
-    if (p.includes('dashboard')) return currentUser.role === 'admin' ? 'Admin Dashboard' : 'Dashboard';
-    if (p === '/explore')  return 'Explore Events';
+    if (p.includes('dashboard')) return currentUser.role === 'admin' || currentUser.role === 'mentor' ? 'Mentor Dashboard' : 'Dashboard';
+    if (p === '/explore')  return 'Explore';
     if (p === '/calendar') return 'My Calendar';
-    if (p === '/manage')   return 'Manage Events';
+    if (p === '/manage')   return 'Manage Content';
     if (p === '/profile')  return 'Settings';
     if (p === '/nexus')    return 'Nexus AI';
-    return 'SurgeSkills';
+    if (p.startsWith('/communities')) return 'Communities';
+    return 'SurgeSkill';
   })();
 
   return (
@@ -76,7 +78,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             fontSize: 10.5, fontWeight: 600, letterSpacing: '0.07em',
             textTransform: 'uppercase', color: 'var(--text-muted)',
           }}>
-            {currentUser.role === 'admin' ? 'Admin Console' : 'Attendee Hub'}
+            {currentUser.role === 'admin' ? 'Admin Console' : currentUser.role === 'mentor' ? 'Mentor Console' : 'Student Hub'}
           </span>
         </div>
 

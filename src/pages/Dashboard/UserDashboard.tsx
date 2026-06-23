@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import type { EventItem } from '../../context/AppContext';
+import type { EventItem, Course, Hackathon } from '../../types';
 
 function useCountdown(dateStr: string) {
   const [diff, setDiff] = useState(new Date(dateStr).getTime() - Date.now());
@@ -30,8 +30,15 @@ const statusBadge = (s: string) => {
 };
 
 export const UserDashboard: React.FC = () => {
-  const { currentUser, events, toggleEventRegistration, showToast } = useApp();
+  const { currentUser, events, courses, hackathons, toggleEventRegistration, showToast } = useApp();
   const navigate = useNavigate();
+
+  const regIds = currentUser?.registeredEvents ?? [];
+  const enCourseIds = currentUser?.enrolledCourses ?? [];
+  const regHackIds = currentUser?.registeredHackathons ?? [];
+  const myEvents = events.filter((e: EventItem) => regIds.includes(e.id));
+  const myCourses = courses.filter((c: Course) => enCourseIds.includes(c.id));
+  const myHacks = hackathons.filter((h: Hackathon) => regHackIds.includes(h.id));
 
   const regIds = currentUser?.registeredEvents ?? [];
   const myEvents = events.filter((e: EventItem) => regIds.includes(e.id));
@@ -51,7 +58,7 @@ export const UserDashboard: React.FC = () => {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Dashboard</h1>
+          <h1 className="page-title">Student Dashboard</h1>
           <p className="page-desc">Welcome back, {currentUser?.name?.split(' ')[0]}. Here's your event overview.</p>
         </div>
         <button className="btn btn-secondary" onClick={() => navigate('/explore')}>
@@ -78,9 +85,14 @@ export const UserDashboard: React.FC = () => {
           <div className="stat-sub">events attended</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-label">Available</div>
-          <div className="stat-value">{events.filter((e: EventItem) => !regIds.includes(e.id) && e.status === 'Confirmed').length}</div>
-          <div className="stat-sub">open to register</div>
+          <div className="stat-label">Courses</div>
+          <div className="stat-value">{myCourses.length}</div>
+          <div className="stat-sub">enrolled</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Hackathons</div>
+          <div className="stat-value">{myHacks.length}</div>
+          <div className="stat-sub">registered</div>
         </div>
       </div>
 
@@ -168,7 +180,8 @@ export const UserDashboard: React.FC = () => {
             </div>
             <div style={{ padding: '8px' }}>
               {[
-                { icon: 'travel_explore', label: 'Explore Events',   path: '/explore' },
+                { icon: 'travel_explore', label: 'Explore All',      path: '/explore' },
+                { icon: 'groups',         label: 'Communities',     path: '/communities' },
                 { icon: 'calendar_today', label: 'My Calendar',      path: '/calendar' },
                 { icon: 'auto_awesome',   label: 'Ask Nexus AI',     path: '/nexus' },
                 { icon: 'settings',       label: 'Edit Profile',     path: '/profile' },

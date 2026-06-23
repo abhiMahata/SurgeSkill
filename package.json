@@ -10,9 +10,11 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "firebase": "^12.15.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.15.1"
+    "react-router-dom": "^7.15.1",
+    "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
