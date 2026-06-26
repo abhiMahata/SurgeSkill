@@ -53,13 +53,17 @@ export const Communities: React.FC = () => {
               {member ? (
                 <>
                   <button className="btn btn-primary btn-sm" onClick={() => navigate(`/communities/${c.id}`)}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>chat</span>Open
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>chat</span>Open Chat
                   </button>
                   <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => { leaveCommunity(c.id); showToast(`Left "${c.name}"`); }}>Leave</button>
                 </>
               ) : (
-                <button className="btn btn-secondary btn-sm" onClick={() => { joinCommunity(c.id); showToast(`Joined "${c.name}"`); }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_add</span>Join
+                <button className="btn btn-secondary btn-sm" onClick={async () => {
+                  await joinCommunity(c.id);
+                  showToast(`Joined "${c.name}"!`);
+                  navigate(`/communities/${c.id}`);
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_add</span>Join & Open
                 </button>
               )}
             </div>

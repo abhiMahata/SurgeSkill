@@ -1,188 +1,227 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import type { EventItem, Course, Hackathon } from '../../types';
 
-function useCountdown(dateStr: string) {
-  const [diff, setDiff] = useState(new Date(dateStr).getTime() - Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setDiff(new Date(dateStr).getTime() - Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [dateStr]);
-  const total = Math.max(0, diff);
-  const d = Math.floor(total / 86400000);
-  const h = Math.floor((total % 86400000) / 3600000);
-  const m = Math.floor((total % 3600000) / 60000);
-  const s = Math.floor((total % 60000) / 1000);
-  return { d, h, m, s };
-}
-
-function pad(n: number) { return String(n).padStart(2, '0'); }
-
-const statusBadge = (s: string) => {
-  const map: Record<string, string> = {
-    Confirmed: 'badge badge-green',
-    Completed: 'badge badge-gray',
-    Draft:     'badge badge-amber',
-    Cancelled: 'badge badge-red',
-  };
-  return map[s] ?? 'badge badge-gray';
+const levelColor: Record<string, string> = {
+  Beginner:     '#10b981',
+  Intermediate: '#f59e0b',
+  Advanced:     '#ef4444',
 };
 
 export const UserDashboard: React.FC = () => {
-  const { currentUser, events, courses, hackathons, toggleEventRegistration, showToast } = useApp();
+  const { currentUser, events, courses, communities, toggleCourseEnrollment, toggleEventRegistration, showToast } = useApp();
   const navigate = useNavigate();
 
-  const regIds = currentUser?.registeredEvents ?? [];
-  const enCourseIds = currentUser?.enrolledCourses ?? [];
-  const regHackIds = currentUser?.registeredHackathons ?? [];
-  const myEvents = events.filter((e: EventItem) => regIds.includes(e.id));
-  const myCourses = courses.filter((c: Course) => enCourseIds.includes(c.id));
-  const myHacks = hackathons.filter((h: Hackathon) => regHackIds.includes(h.id));
+  const enrolledIds  = currentUser?.enrolledCourses    ?? [];
+  const regEventIds  = currentUser?.registeredEvents   ?? [];
+  const joinedCommIds = currentUser?.joinedCommunities ?? [];
 
-  const upcoming = myEvents.filter((e: EventItem) => new Date(e.date) > new Date() && e.status !== 'Completed' && e.status !== 'Cancelled');
-  const completed = myEvents.filter((e: EventItem) => e.status === 'Completed' || new Date(e.date) < new Date());
-  const nextEvent = upcoming.sort((a: EventItem, b: EventItem) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+  const myCourses    = courses.filter(c => enrolledIds.includes(c.id));
+  const myComms      = communities.filter(c => joinedCommIds.includes(c.id));
+  const myEvents     = events.filter(e => regEventIds.includes(e.id));
+  const upcomingEvs  = events
+    .filter(e => new Date(e.date) > new Date() && e.status === 'Confirmed')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 4);
 
-  const { d, h, m, s } = useCountdown(nextEvent?.date ?? new Date().toISOString());
+  // Featured courses not yet enrolled
+  const featuredCourses = courses
+    .filter(c => !enrolledIds.includes(c.id) && c.status === 'Active')
+    .slice(0, 3);
 
-  const handleToggle = (id: string, title: string) => {
-    const r = toggleEventRegistration(id);
-    if (r.success) showToast(r.registered ? `Registered for "${title}"` : `Left "${title}"`);
-  };
+  // Unique mentors from all courses
+  const mentors = Array.from(new Set(courses.map(c => c.mentor))).slice(0, 4);
+
+  const roleBadgeColor = currentUser?.role === 'mentor'
+    ? 'linear-gradient(135deg,#8b5cf6,#6366f1)'
+    : 'linear-gradient(135deg,#3b82f6,#06b6d4)';
 
   return (
-    <div style={{ maxWidth: 1060 }}>
-      {/* Page header */}
-      <div className="page-header">
+    <div style={{ maxWidth: 1080 }}>
+      {/* ── Welcome header ─────────────────────────────────────── */}
+      <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">Student Dashboard</h1>
-          <p className="page-desc">Welcome back, {currentUser?.name?.split(' ')[0]}. Here's your event overview.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <h1 className="page-title" style={{ marginBottom: 0 }}>
+              Welcome back, {currentUser?.name?.split(' ')[0]} 👋
+            </h1>
+            <span style={{
+              fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
+              background: roleBadgeColor, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em',
+            }}>
+              {currentUser?.role}
+            </span>
+          </div>
+          <p className="page-desc">
+            {currentUser?.college ? `${currentUser.college} · ` : ''}{currentUser?.department || 'SurgeSkill Community'}
+          </p>
         </div>
-        <button className="btn btn-secondary" onClick={() => navigate('/explore')}>
+        <button className="btn btn-primary" onClick={() => navigate('/explore')}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>travel_explore</span>
-          Browse events
+          Explore Courses
         </button>
       </div>
 
-      {/* Stats strip */}
-      <div className="stat-strip">
+      {/* ── Stats strip ────────────────────────────────────────── */}
+      <div className="stat-strip" style={{ marginBottom: 24 }}>
         <div className="stat-cell">
-          <div className="stat-label">Registered</div>
-          <div className="stat-value">{regIds.length}</div>
-          <div className="stat-sub">total events</div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-label">Upcoming</div>
-          <div className="stat-value">{upcoming.length}</div>
-          <div className="stat-sub">scheduled ahead</div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-label">Completed</div>
-          <div className="stat-value">{completed.length}</div>
-          <div className="stat-sub">events attended</div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-label">Courses</div>
+          <div className="stat-label">Courses Enrolled</div>
           <div className="stat-value">{myCourses.length}</div>
-          <div className="stat-sub">enrolled</div>
+          <div className="stat-sub">active courses</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-label">Hackathons</div>
-          <div className="stat-value">{myHacks.length}</div>
+          <div className="stat-label">Communities</div>
+          <div className="stat-value">{myComms.length}</div>
+          <div className="stat-sub">groups joined</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Events</div>
+          <div className="stat-value">{myEvents.length}</div>
           <div className="stat-sub">registered</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Mentors</div>
+          <div className="stat-value">{mentors.length}</div>
+          <div className="stat-sub">on the platform</div>
         </div>
       </div>
 
-      {/* Countdown + grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
-        <div>
-          {/* Next event countdown */}
-          {nextEvent && (
-            <div className="countdown-box" style={{ marginBottom: 20 }}>
-              <div className="countdown-label">Next registered event</div>
-              <div className="countdown-event">{nextEvent.title}</div>
-              <div className="countdown-venue">
-                <span className="material-symbols-outlined" style={{ fontSize: 13, verticalAlign: 'middle', marginRight: 4 }}>pin_drop</span>
-                {nextEvent.venue}
-              </div>
-              <div style={{ display: 'flex', gap: 24 }}>
-                {[[d, 'Days'], [h, 'Hours'], [m, 'Min'], [s, 'Sec']].map(([val, lbl]) => (
-                  <div key={String(lbl)}>
-                    <div className="countdown-timer">{pad(Number(val))}</div>
-                    <div className="countdown-timer-label">{lbl}</div>
+      {/* ── Main grid ──────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, marginBottom: 20 }}>
+
+        {/* Left: My Courses */}
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">My Courses</div>
+              <div className="card-subtitle">{myCourses.length} enrolled</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/explore')}>
+              Browse more
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_forward</span>
+            </button>
+          </div>
+
+          {myCourses.length === 0 ? (
+            <div className="empty-state">
+              <span className="material-symbols-outlined empty-icon">school</span>
+              <div className="empty-title">No courses yet</div>
+              <div className="empty-desc">Browse and enroll in courses taught by mentors in your community.</div>
+              <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => navigate('/explore')}>
+                Find Courses
+              </button>
+            </div>
+          ) : (
+            <div>
+              {myCourses.map(c => {
+                // Fake progress for now — can be made real later
+                const progress = Math.floor(Math.random() * 60) + 10;
+                return (
+                  <div key={c.id} className="event-row" style={{ cursor: 'default' }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 'var(--radius-md)', flexShrink: 0,
+                      background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 20 }}>menu_book</span>
+                    </div>
+                    <div className="event-info">
+                      <div className="event-title">{c.title}</div>
+                      <div className="event-meta">
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 12 }}>person</span>
+                          {c.mentor}
+                        </span>
+                        <span style={{ color: 'var(--border-strong)' }}>·</span>
+                        <span style={{ color: levelColor[c.level] ?? 'var(--text-muted)', fontWeight: 600 }}>{c.level}</span>
+                      </div>
+                      <div style={{ marginTop: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Progress</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{progress}%</span>
+                        </div>
+                        <div style={{ height: 4, background: 'var(--border)', borderRadius: 99 }}>
+                          <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg,#6366f1,#8b5cf6)', borderRadius: 99, transition: 'width 0.4s' }} />
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--red)', fontSize: 12 }}
+                      onClick={() => { toggleCourseEnrollment(c.id); showToast(`Unenrolled from "${c.title}"`); }}
+                    >
+                      Drop
+                    </button>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           )}
+        </div>
 
-          {/* My registered events */}
+        {/* Right: My Communities + Quick Actions */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* My Communities */}
           <div className="card">
             <div className="card-header">
-              <div>
-                <div className="card-title">My Events</div>
-                <div className="card-subtitle">{myEvents.length} events registered</div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/calendar')}>
-                View calendar
+              <div className="card-title">My Communities</div>
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/communities')}>
+                All
                 <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_forward</span>
               </button>
             </div>
-
-            {myEvents.length === 0 ? (
-              <div className="empty-state">
-                <span className="material-symbols-outlined empty-icon">event_busy</span>
-                <div className="empty-title">No events yet</div>
-                <div className="empty-desc">Browse events and register for upcoming sessions.</div>
+            {myComms.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>You haven't joined any communities yet.</div>
+                <button className="btn btn-secondary btn-sm" onClick={() => navigate('/communities')}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>groups</span>
+                  Browse Communities
+                </button>
               </div>
             ) : (
               <div>
-                {myEvents.map((ev: EventItem) => (
-                  <div key={ev.id} className="event-row">
-                    <img src={ev.image} alt={ev.title} className="event-thumb" />
-                    <div className="event-info">
-                      <div className="event-title">{ev.title}</div>
-                      <div className="event-meta">
-                        <span>{new Date(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        <span style={{ color: 'var(--border-strong)' }}>·</span>
-                        <span className="truncate" style={{ maxWidth: 160 }}>{ev.venue}</span>
+                {myComms.slice(0, 4).map(c => (
+                  <div
+                    key={c.id}
+                    style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 120ms' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--bg)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
+                    onClick={() => navigate(`/communities/${c.id}`)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 'var(--radius-md)', flexShrink: 0,
+                        background: c.type === 'college'
+                          ? 'linear-gradient(135deg,#3b82f6,#8b5cf6)'
+                          : 'linear-gradient(135deg,#10b981,#3b82f6)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#fff' }}>
+                          {c.type === 'college' ? 'school' : 'groups'}
+                        </span>
                       </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className={statusBadge(ev.status)}>{ev.status}</span>
-                      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{ev.price}</span>
-                      {ev.status === 'Confirmed' && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ color: 'var(--red)', fontSize: 12 }}
-                          onClick={() => handleToggle(ev.id, ev.title)}
-                        >
-                          Leave
-                        </button>
-                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.memberIds?.length || 0} members</div>
+                      </div>
+                      <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-muted)' }}>chevron_right</span>
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </div>
 
-        {/* Right column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Quick actions */}
+          {/* Quick Actions */}
           <div className="card">
-            <div className="card-header">
-              <div className="card-title">Quick Actions</div>
-            </div>
+            <div className="card-header"><div className="card-title">Quick Actions</div></div>
             <div style={{ padding: '8px' }}>
               {[
-                { icon: 'travel_explore', label: 'Explore All',      path: '/explore' },
-                { icon: 'groups',         label: 'Communities',     path: '/communities' },
-                { icon: 'calendar_today', label: 'My Calendar',      path: '/calendar' },
-                { icon: 'auto_awesome',   label: 'Ask Nexus AI',     path: '/nexus' },
-                { icon: 'settings',       label: 'Edit Profile',     path: '/profile' },
+                { icon: 'travel_explore', label: 'Explore All',    path: '/explore' },
+                { icon: 'groups',         label: 'Communities',    path: '/communities' },
+                { icon: 'calendar_today', label: 'My Calendar',    path: '/calendar' },
+                { icon: 'settings',       label: 'Edit Profile',   path: '/profile' },
               ].map(a => (
                 <button
                   key={a.path}
@@ -196,37 +235,111 @@ export const UserDashboard: React.FC = () => {
               ))}
             </div>
           </div>
-
-          {/* Suggested events */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Suggested</div>
-              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/explore')}>See all</button>
-            </div>
-            <div>
-              {events
-                .filter((e: EventItem) => !regIds.includes(e.id) && e.status === 'Confirmed')
-                .slice(0, 3)
-                .map((ev: EventItem) => (
-                  <div
-                    key={ev.id}
-                    style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 120ms' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--bg)'}
-                    onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
-                    onClick={() => navigate('/explore')}
-                  >
-                    <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 3 }}>{ev.title}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8 }}>
-                      <span>{new Date(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                      <span>·</span>
-                      <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{ev.price}</span>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
         </div>
       </div>
+
+      {/* ── Upcoming Events ──────────────────────────────────────── */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header">
+          <div>
+            <div className="card-title">Upcoming Events</div>
+            <div className="card-subtitle">Platform-wide events you can register for</div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/explore')}>See all</button>
+        </div>
+        {upcomingEvs.length === 0 ? (
+          <div className="empty-state" style={{ padding: '24px' }}>
+            <div className="empty-desc">No upcoming events right now. Check back soon!</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 0 }}>
+            {upcomingEvs.map((ev, i) => {
+              const isReg = regEventIds.includes(ev.id);
+              const d = new Date(ev.date);
+              return (
+                <div key={ev.id} style={{ padding: '14px 16px', borderRight: i < upcomingEvs.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <div style={{
+                      width: 42, height: 42, borderRadius: 'var(--radius-md)', flexShrink: 0,
+                      background: 'linear-gradient(135deg,#f59e0b,#ef4444)',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{d.getDate()}</div>
+                      <div style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>
+                        {d.toLocaleString('default', { month: 'short' })}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>{ev.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{ev.venue}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{ev.price}</span>
+                    <button
+                      className={`btn btn-sm ${isReg ? 'btn-ghost' : 'btn-primary'}`}
+                      style={{ fontSize: 12, padding: '4px 10px' }}
+                      onClick={() => {
+                        const r = toggleEventRegistration(ev.id);
+                        if (r.success) showToast(r.registered ? `Registered for "${ev.title}"` : `Left "${ev.title}"`);
+                      }}
+                    >
+                      {isReg ? 'Registered ✓' : 'Register'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Featured Courses by Mentors ──────────────────────────── */}
+      {featuredCourses.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Recommended for You</div>
+              <div className="card-subtitle">Courses taught by SurgeSkill mentors</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/explore')}>See all courses</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}>
+            {featuredCourses.map((c, i) => (
+              <div key={c.id} style={{ padding: '16px', borderRight: i < 2 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 'var(--radius-sm)', flexShrink: 0,
+                    background: ['linear-gradient(135deg,#6366f1,#8b5cf6)', 'linear-gradient(135deg,#10b981,#3b82f6)', 'linear-gradient(135deg,#f59e0b,#ef4444)'][i % 3],
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 18 }}>menu_book</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{c.category}</div>
+                    <div style={{ fontSize: 10, color: levelColor[c.level], fontWeight: 600 }}>{c.level}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4, lineHeight: 1.3 }}>{c.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 12 }}>person</span>
+                  {c.mentor}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{c.price}</span>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ fontSize: 12 }}
+                    onClick={() => { toggleCourseEnrollment(c.id); showToast(`Enrolled in "${c.title}"`); }}
+                  >
+                    Enroll
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

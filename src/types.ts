@@ -38,6 +38,7 @@ export interface EventItem {
   registrationsCount: number;
   status: 'Confirmed' | 'Draft' | 'Cancelled' | 'Completed';
   createdBy?: string;
+  communityId?: string;
 }
 
 export interface Hackathon {
