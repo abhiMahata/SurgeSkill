@@ -13,6 +13,12 @@ export interface User {
   enrolledCourses: string[];
   registeredHackathons: string[];
   joinedCommunities: string[];
+  // Onboarding — set once, immutable after
+  onboardingComplete?: boolean;
+  age?: string;
+  country?: string;
+  state?: string;
+  city?: string;
   // Student-specific
   college?: string;
   department?: string;

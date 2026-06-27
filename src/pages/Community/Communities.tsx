@@ -92,11 +92,37 @@ export const Communities: React.FC = () => {
         <input className="search-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Search communities…" />
       </div>
 
+      {/* ── Your College Communities ───────────────────────── */}
+      {myCollege && (() => {
+        const myCollegeCommunities = filtered(collegeCommunities).filter(
+          c => c.college === myCollege || c.name.toLowerCase().includes(myCollege.toLowerCase())
+        );
+        if (myCollegeCommunities.length === 0) return null;
+        return (
+          <>
+            <div style={{
+              fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+              marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span style={{
+                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                borderRadius: 6, padding: '3px 7px', fontSize: 11, color: '#fff', fontWeight: 700,
+              }}>YOUR COLLEGE</span>
+              {myCollege}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
+              {myCollegeCommunities.map(c => <CommunityCard key={c.id} c={c} />)}
+            </div>
+          </>
+        );
+      })()}
+
       {/* College Communities */}
       {filtered(collegeCommunities).length > 0 && (
         <>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>school</span>College Communities
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>school</span>All College Communities
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
             {filtered(collegeCommunities).map(c => <CommunityCard key={c.id} c={c} />)}

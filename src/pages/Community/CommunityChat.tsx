@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { collection, addDoc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, limit, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useApp } from '../../context/AppContext';
 import type { ChatMessage } from '../../types';
 
 function isFirebaseReady() {
   try { return (db as any)._databaseId?.projectId !== 'YOUR_PROJECT'; } catch { return false; }
+}
+
+/** Strip HTML tags to prevent XSS from chat messages */
+function sanitizeText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 type ActiveTab = 'chat' | 'events';
@@ -70,16 +80,16 @@ export const CommunityChat: React.FC = () => {
   const sendMessage = useCallback(async (text: string, mediaBase64?: string, mediaType?: string) => {
     if (!currentUser || !id || (!text.trim() && !mediaBase64)) return;
     setSending(true);
+    const safeText = sanitizeText(text.trim());
     const msg: Omit<ChatMessage, 'id'> = {
-      communityId: id, senderId: currentUser.id, senderName: currentUser.name,
-      senderPhoto: currentUser.photoURL, text: text.trim(),
+      communityId: id, senderId: currentUser.id, senderName: sanitizeText(currentUser.name),
+      senderPhoto: currentUser.photoURL, text: safeText,
       mediaBase64, mediaType, timestamp: Date.now(),
     };
     if (fbReady) {
       try {
         await addDoc(collection(db, 'communities', id, 'messages'), msg);
       } catch {
-        // Firestore rejected (e.g. security rules not set) — fall back to local storage
         const local = [...messages, { ...msg, id: `msg-${Date.now()}` }];
         setMessages(local as ChatMessage[]);
         localStorage.setItem(`ss_chat_${id}`, JSON.stringify(local));
@@ -235,10 +245,27 @@ export const CommunityChat: React.FC = () => {
                           wordBreak: 'break-word', boxShadow: 'var(--shadow-sm)',
                         }}>
                           {m.mediaBase64 && <img src={m.mediaBase64} alt="shared" style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block', marginBottom: m.text ? 6 : 0 }} />}
-                          {m.text && <span>{m.text}</span>}
+                          {m.text && <span dangerouslySetInnerHTML={{ __html: m.text }} />}
                         </div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, textAlign: isMe ? 'right' : 'left', marginLeft: 2, marginRight: 2 }}>
-                          {formatTime(m.timestamp)}
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                          <span>{formatTime(m.timestamp)}</span>
+                          {(isMe || currentUser?.role === 'admin') && (
+                            <button
+                              title="Delete message"
+                              onClick={async () => {
+                                if (fbReady) {
+                                  try { await deleteDoc(doc(db, 'communities', id!, 'messages', m.id)); } catch {}
+                                } else {
+                                  const updated = messages.filter(x => x.id !== m.id);
+                                  setMessages(updated);
+                                  localStorage.setItem(`ss_chat_${id}`, JSON.stringify(updated));
+                                }
+                              }}
+                              style={{ fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>delete</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

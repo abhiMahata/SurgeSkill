@@ -64,40 +64,27 @@ export const UserProfile: React.FC = () => {
   const [name, setName]   = useState(currentUser?.name ?? '');
   const [desig, setDesig] = useState(currentUser?.designation ?? '');
   
-  // Student fields
-  const [college, setCollege] = useState(currentUser?.college ?? currentUser?.organization ?? '');
-  const [dept, setDept]       = useState(currentUser?.department ?? '');
-  const [year, setYear]       = useState(currentUser?.yearOfStudy ?? '');
-  const [phone, setPhone]     = useState(currentUser?.phone ?? '');
-  
+  // Student fields — none editable post-onboarding (set once, locked)
   // Mentor fields
-  const [org, setOrg]         = useState(currentUser?.organization ?? '');
-  const [expertise, setExpertise] = useState(currentUser?.expertise ?? '');
-  const [linkedin, setLinkedin]   = useState(currentUser?.linkedin ?? '');
+  const [org, setOrg]             = useState(currentUser?.organization ?? '');
+  const [expertise, setExpertise] = useState(currentUser?.expertise   ?? '');
+  const [linkedin, setLinkedin]   = useState(currentUser?.linkedin     ?? '');
 
-  const [newPw, setNewPw] = useState('');
-  const [confPw, setConfPw] = useState('');
+
 
   if (!currentUser) return null;
 
   const saveInfo = (e: React.FormEvent) => {
     e.preventDefault();
     let data: any = { name, designation: desig };
-    if (currentUser.role === 'student') {
-      data = { ...data, college, organization: college, department: dept, yearOfStudy: year, phone };
-    } else {
+    if (currentUser.role !== 'student') {
       data = { ...data, organization: org, expertise, linkedin };
     }
     const ok = updateProfile(data);
     if (ok) showToast('Profile updated');
   };
 
-  const savePw = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPw !== confPw) { alert('Passwords do not match.'); return; }
-    const ok = updateProfile({ password: newPw });
-    if (ok) { showToast('Password updated'); setNewPw(''); setConfPw(''); }
-  };
+
 
   return (
     <div style={{ maxWidth: 780 }}>
@@ -128,18 +115,72 @@ export const UserProfile: React.FC = () => {
 
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', textAlign: 'left' }}>
             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 10 }}>Account</div>
-            {[
-              { l: 'Email',      v: currentUser.email },
-              { l: 'User ID',    v: currentUser.id },
-              { l: 'Communities',v: `${currentUser.joinedCommunities?.length || 0} joined` },
-            ].map(r => (
-              <div key={r.l} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{r.l}</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 500, wordBreak: 'break-all' }}>{r.v}</div>
+
+            {/* Email */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Email</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 500, wordBreak: 'break-all' }}>{currentUser.email}</div>
+            </div>
+
+            {/* Member Tag — copyable */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Member Tag</div>
+              <button
+                title="Click to copy your Member ID"
+                onClick={() => {
+                  navigator.clipboard.writeText(currentUser.id).then(() => showToast('Member ID copied!'));
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'var(--bg)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '5px 9px', cursor: 'pointer',
+                  transition: 'border-color 120ms', width: '100%',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-strong)')}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--text-muted)', flexShrink: 0 }}>badge</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'monospace', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  #{currentUser.id.slice(0, 10).toUpperCase()}
+                </span>
+                <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }}>content_copy</span>
+              </button>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+                Unique across all of SurgeSkill
               </div>
-            ))}
+            </div>
+
+            {/* Communities joined */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Communities</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 500 }}>{currentUser.joinedCommunities?.length || 0} joined</div>
+            </div>
           </div>
+
+          {/* Location — set during onboarding, locked */}
+          {(currentUser.country || currentUser.college) && (
+            <div style={{ marginTop: 4, paddingTop: 16, borderTop: '1px solid var(--border)', textAlign: 'left' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>Location</div>
+                <span title="Set during onboarding — cannot be changed" style={{ display: 'flex', alignItems: 'center' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--text-muted)' }}>lock</span>
+                </span>
+              </div>
+              {[
+                { l: 'Country',     v: currentUser.country },
+                { l: 'State',       v: currentUser.state },
+                { l: 'City',        v: currentUser.city },
+                { l: 'Institution', v: currentUser.college },
+              ].filter(r => r.v).map(r => (
+                <div key={r.l} style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{r.l}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 500 }}>{r.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
 
         {/* Right — forms */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -158,14 +199,7 @@ export const UserProfile: React.FC = () => {
                   <Field label="Full Name"    value={name}  onChange={setName}  autoComplete="off" />
                   <Field label="Email"        value={currentUser.email} onChange={() => {}} disabled />
                   
-                  {currentUser.role === 'student' ? (
-                    <>
-                      <Field label="College / University" value={college} onChange={setCollege} autoComplete="off" />
-                      <Field label="Department" value={dept} onChange={setDept} autoComplete="off" />
-                      <Field label="Year of Study" value={year} onChange={setYear} autoComplete="off" placeholder="e.g. 3rd Year" />
-                      <Field label="Phone" value={phone} onChange={setPhone} autoComplete="off" type="tel" />
-                    </>
-                  ) : (
+                  {currentUser.role !== 'student' && (
                     <>
                       <Field label="Designation"  value={desig} onChange={setDesig} autoComplete="off" />
                       <Field label="Organization" value={org}   onChange={setOrg}   autoComplete="off" />
@@ -176,27 +210,6 @@ export const UserProfile: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button type="submit" className="btn btn-primary">Save changes</button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          {/* Password */}
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <div className="card-title">Password & Security</div>
-                <div className="card-subtitle">Update your account password</div>
-              </div>
-            </div>
-            <div className="card-body">
-              <form onSubmit={savePw} autoComplete="off">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
-                  <Field label="New Password"     type="password" value={newPw}   onChange={setNewPw}   minLength={4} placeholder="Min. 4 characters" autoComplete="new-password" />
-                  <Field label="Confirm Password" type="password" value={confPw}  onChange={setConfPw}  minLength={4} placeholder="Repeat password"    autoComplete="new-password" />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="submit" className="btn btn-primary">Update password</button>
                 </div>
               </form>
             </div>

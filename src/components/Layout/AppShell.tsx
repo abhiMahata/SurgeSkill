@@ -60,14 +60,13 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
       {/* Sidebar */}
       <aside className="sidebar">
+        {/* Unified blue header: logo + role label */}
         <div className="sidebar-logo">
-          <img src="/logo.png" alt="SurgeSkill" style={{ height: 40, objectFit: 'contain' }} />
-        </div>
-
-        <div style={{ padding: '10px 16px 0' }}>
+          <img src="/logo.png" alt="SurgeSkill" style={{ height: 48, objectFit: 'contain', maxWidth: '100%', display: 'block' }} />
           <span style={{
-            fontSize: 10.5, fontWeight: 600, letterSpacing: '0.07em',
-            textTransform: 'uppercase', color: 'var(--text-muted)',
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: 'rgba(255,255,255,0.85)',
+            marginTop: 6,
           }}>
             {roleLabel}
           </span>

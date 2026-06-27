@@ -113,48 +113,43 @@ export const UserDashboard: React.FC = () => {
             </div>
           ) : (
             <div>
-              {myCourses.map(c => {
-                // Fake progress for now — can be made real later
-                const progress = Math.floor(Math.random() * 60) + 10;
-                return (
-                  <div key={c.id} className="event-row" style={{ cursor: 'default' }}>
-                    <div style={{
-                      width: 44, height: 44, borderRadius: 'var(--radius-md)', flexShrink: 0,
-                      background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 20 }}>menu_book</span>
-                    </div>
-                    <div className="event-info">
-                      <div className="event-title">{c.title}</div>
-                      <div className="event-meta">
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 12 }}>person</span>
-                          {c.mentor}
-                        </span>
-                        <span style={{ color: 'var(--border-strong)' }}>·</span>
-                        <span style={{ color: levelColor[c.level] ?? 'var(--text-muted)', fontWeight: 600 }}>{c.level}</span>
-                      </div>
-                      <div style={{ marginTop: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Progress</span>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{progress}%</span>
-                        </div>
-                        <div style={{ height: 4, background: 'var(--border)', borderRadius: 99 }}>
-                          <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg,#6366f1,#8b5cf6)', borderRadius: 99, transition: 'width 0.4s' }} />
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ color: 'var(--red)', fontSize: 12 }}
-                      onClick={() => { toggleCourseEnrollment(c.id); showToast(`Unenrolled from "${c.title}"`); }}
-                    >
-                      Drop
-                    </button>
+              {myCourses.map(c => (
+                <div key={c.id} className="event-row" style={{ cursor: 'default' }}>
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 'var(--radius-md)', flexShrink: 0,
+                    background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 20 }}>menu_book</span>
                   </div>
-                );
-              })}
+                  <div className="event-info">
+                    <div className="event-title">{c.title}</div>
+                    <div className="event-meta">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 12 }}>person</span>
+                        {c.mentor}
+                      </span>
+                      <span style={{ color: 'var(--border-strong)' }}>·</span>
+                      <span style={{ color: levelColor[c.level] ?? 'var(--text-muted)', fontWeight: 600 }}>{c.level}</span>
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
+                        background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-muted)',
+                      }}>
+                        In Progress
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--red)', fontSize: 12 }}
+                    onClick={() => { toggleCourseEnrollment(c.id); showToast(`Unenrolled from "${c.title}"`); }}
+                  >
+                    Drop
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

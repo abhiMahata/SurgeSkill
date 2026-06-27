@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helpers
+    function isAuth() {
+      return request.auth != null;
+    }
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isAdminOrMentor() {
+      return isAuth() && (userRole() == 'admin' || userRole() == 'mentor');
+    }
+
+    // ── Users ───────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read:   if isAuth();
+      allow create: if isAuth() && request.auth.uid == userId;
+      allow update: if isAuth() && request.auth.uid == userId;
+      allow delete: if false; // no user deletion via client
+    }
+
+    // ── Events ──────────────────────────────────────────────────────────────
+    match /events/{eventId} {
+      allow read:   if isAuth();
+      allow create: if isAdminOrMentor();
+      allow update: if isAuth(); // students update registrationsCount via toggle
+      allow delete: if isAdminOrMentor();
+    }
+
+    // ── Hackathons ───────────────────────────────────────────────────────────
+    match /hackathons/{hackathonId} {
+      allow read:   if isAuth();
+      allow create: if isAdminOrMentor();
+      allow update: if isAuth();
+      allow delete: if isAdminOrMentor();
+    }
+
+    // ── Courses ──────────────────────────────────────────────────────────────
+    match /courses/{courseId} {
+      allow read:   if isAuth();
+      allow create: if isAdminOrMentor();
+      allow update: if isAuth();
+      allow delete: if isAdminOrMentor();
+    }
+
+    // ── Communities ──────────────────────────────────────────────────────────
+    match /communities/{communityId} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth(); // join/leave updates memberIds
+      allow delete: if isAuth() && userRole() == 'admin';
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read:   if isAuth();
+        allow create: if isAuth() && request.resource.data.senderId == request.auth.uid;
+        allow update: if false; // messages are immutable
+        allow delete: if isAuth() && (
+          resource.data.senderId == request.auth.uid ||
+          userRole() == 'admin'
+        );
+      }
+    }
+
+    // ── Activity log ─────────────────────────────────────────────────────────
+    match /activities/{activityId} {
+      allow read:   if isAuth() && userRole() == 'admin';
+      allow create: if isAuth();
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

@@ -14,35 +14,52 @@ const iStyle: React.CSSProperties = {
 };
 const onFocus = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
   e.target.style.borderColor = 'var(--text-primary)';
-  e.target.style.boxShadow = '0 0 0 3px rgba(10,10,10,0.07)';
+  e.target.style.boxShadow   = '0 0 0 3px rgba(10,10,10,0.07)';
 };
 const onBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
   e.target.style.borderColor = 'var(--border)';
-  e.target.style.boxShadow = 'none';
+  e.target.style.boxShadow   = 'none';
 };
+
+/** Returns strength 0-4 and a label */
+function passwordStrength(pw: string): { score: number; label: string; color: string } {
+  let score = 0;
+  if (pw.length >= 8)  score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  const clamp = Math.min(score, 4);
+  const labels = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'];
+  const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#16a34a'];
+  return { score: clamp, label: labels[clamp], color: colors[clamp] };
+}
 
 type Tab = 'login' | 'register';
 
 export const LoginPage: React.FC = () => {
-  const { login, register, loginWithGoogle, showToast } = useApp();
+  const { login, register, loginWithGoogle, forgotPassword, showToast } = useApp();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('login');
 
   // Login state
-  const [em, setEm] = useState('');
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
+  const [em, setEm]           = useState('');
+  const [pw, setPw]           = useState('');
+  const [err, setErr]         = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot]     = useState(false);
+  const [forgotEmail, setForgotEmail]   = useState('');
+  const [forgotMsg, setForgotMsg]       = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
 
-  // Register state
-  const [rn, setRn]         = useState('');
-  const [re, setRe]         = useState('');
-  const [rp, setRp]         = useState('');
-  const [role, setRole]     = useState<UserRole>('student');
-  const [college, setCollege] = useState('');
-  const [dept, setDept]     = useState('');
-  const [rerr, setRerr]     = useState('');
+  // Register state (minimal — onboarding collects the rest)
+  const [re, setRe]             = useState('');
+  const [rp, setRp]             = useState('');
+  const [rpc, setRpc]           = useState('');
+  const [rerr, setRerr]         = useState('');
   const [rloading, setRloading] = useState(false);
+
+  const strength = passwordStrength(rp);
 
   const doLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,9 +68,11 @@ export const LoginPage: React.FC = () => {
     setLoading(false);
     if (res.success) {
       showToast('Welcome back!');
-      // admin intercept routes to admin dashboard
-      if (em.trim().toLowerCase() === 'admin@surgeskill.com') navigate('/dashboard/admin');
-      else navigate('/dashboard/user');
+      if (em.trim().toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL as string || '').toLowerCase()) {
+        navigate('/dashboard/admin');
+      } else {
+        navigate('/dashboard/user');
+      }
     } else {
       setErr(res.message);
     }
@@ -61,10 +80,12 @@ export const LoginPage: React.FC = () => {
 
   const doRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (rp !== rpc) { setRerr('Passwords do not match.'); return; }
+    if (rp.length < 8) { setRerr('Password must be at least 8 characters.'); return; }
     setRloading(true); setRerr('');
-    const res = await register(rn, re, rp, role, { college, department: dept });
+    const res = await register(re, rp);
     setRloading(false);
-    if (res.success) { showToast('Account created! Welcome to SurgeSkill.'); navigate('/dashboard/user'); }
+    if (res.success) { showToast('Account created! Complete your profile to get started.'); navigate('/dashboard/user'); }
     else setRerr(res.message);
   };
 
@@ -72,6 +93,14 @@ export const LoginPage: React.FC = () => {
     const res = await loginWithGoogle();
     if (res.success) { showToast('Welcome!'); navigate('/dashboard/user'); }
     else setErr(res.message);
+  };
+
+  const doForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true); setForgotMsg('');
+    const res = await forgotPassword(forgotEmail);
+    setForgotLoading(false);
+    setForgotMsg(res.message);
   };
 
   return (
@@ -82,13 +111,11 @@ export const LoginPage: React.FC = () => {
         <div className="auth-panel-overlay"
           style={{ background: 'linear-gradient(160deg, rgba(8,4,22,0.95) 0%, rgba(14,10,45,0.88) 55%, rgba(22,16,70,0.80) 100%)' }}
         />
-
         <div className="auth-panel-content">
           <div style={{ display: 'inline-block', background: '#fff', borderRadius: 10, padding: '8px 16px' }}>
             <img src="/logo.png" alt="SurgeSkill" style={{ height: 36, objectFit: 'contain', display: 'block' }} />
           </div>
         </div>
-
         <div className="auth-panel-content">
           <p style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>
             Student-Led Learning Community
@@ -99,17 +126,12 @@ export const LoginPage: React.FC = () => {
           <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', lineHeight: 1.75, maxWidth: 360 }}>
             A community-driven platform connecting mentors and students through courses, events, and collaborative learning.
           </p>
-
-          <div style={{ display: 'flex', gap: 36, marginTop: 40 }}>
-            {[['200+', 'Active Courses'], ['5K+', 'Students'], ['150+', 'Mentors']].map(([v, l]) => (
-              <div key={l}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1 }}>{v}</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>{l}</div>
-              </div>
-            ))}
+          <div style={{ marginTop: 40, padding: '16px 20px', background: 'rgba(255,255,255,0.07)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', maxWidth: 360 }}>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
+              🚀 Built for students and mentors. Create your free account and start connecting with your college community today.
+            </p>
           </div>
         </div>
-
         <div className="auth-panel-content">
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>© 2026 SurgeSkill Inc.</span>
         </div>
@@ -142,6 +164,7 @@ export const LoginPage: React.FC = () => {
 
           {/* Google */}
           <button
+            id="btn-google-signin"
             onClick={doGoogle}
             style={{
               width: '100%', padding: '9px', fontSize: 13.5, fontWeight: 500,
@@ -165,20 +188,26 @@ export const LoginPage: React.FC = () => {
 
           {/* Login form */}
           {tab === 'login' && (
-            <form onSubmit={doLogin} autoComplete="off">
+            <form id="form-login" onSubmit={doLogin} autoComplete="off">
               {err && <div className="error-box" style={{ marginBottom: 14 }}>{err}</div>}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div className="form-group">
                   <label className="form-label">Email</label>
-                  <input style={iStyle} type="email" value={em} onChange={e => setEm(e.target.value)}
+                  <input id="input-login-email" style={iStyle} type="email" value={em} onChange={e => setEm(e.target.value)}
                     onFocus={onFocus as any} onBlur={onBlur as any} required />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Password</label>
-                  <input style={iStyle} type="password" value={pw} onChange={e => setPw(e.target.value)}
+                  <input id="input-login-password" style={iStyle} type="password" value={pw} onChange={e => setPw(e.target.value)}
                     onFocus={onFocus as any} onBlur={onBlur as any} required />
                 </div>
-                <button type="submit" className="btn btn-primary"
+                <div style={{ textAlign: 'right', marginTop: -8 }}>
+                  <button type="button" onClick={() => { setShowForgot(true); setForgotMsg(''); setForgotEmail(em); }}
+                    style={{ fontSize: 12, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                    Forgot password?
+                  </button>
+                </div>
+                <button id="btn-login-submit" type="submit" className="btn btn-primary"
                   style={{ width: '100%', justifyContent: 'center', padding: '10px', marginTop: 4 }}
                   disabled={loading}>
                   {loading ? 'Signing in…' : 'Sign In'}
@@ -187,47 +216,47 @@ export const LoginPage: React.FC = () => {
             </form>
           )}
 
-          {/* Register form */}
+          {/* Register form — minimal, onboarding collects the rest */}
           {tab === 'register' && (
-            <form onSubmit={doRegister} autoComplete="off">
+            <form id="form-register" onSubmit={doRegister} autoComplete="off">
               {rerr && <div className="error-box" style={{ marginBottom: 14 }}>{rerr}</div>}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label">Full Name *</label>
-                  <input style={iStyle} type="text" value={rn} onChange={e => setRn(e.target.value)}
-                    onFocus={onFocus as any} onBlur={onBlur as any} required />
-                </div>
-                <div className="form-group">
                   <label className="form-label">Email *</label>
-                  <input style={iStyle} type="email" value={re} onChange={e => setRe(e.target.value)}
+                  <input id="input-reg-email" style={iStyle} type="email" value={re} onChange={e => setRe(e.target.value)}
                     onFocus={onFocus as any} onBlur={onBlur as any} required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Password *</label>
-                  <input style={iStyle} type="password" value={rp} onChange={e => setRp(e.target.value)}
-                    onFocus={onFocus as any} onBlur={onBlur as any} required minLength={4} />
+                  <label className="form-label">Password * <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(min 8 chars)</span></label>
+                  <input id="input-reg-password" style={iStyle} type="password" value={rp} onChange={e => setRp(e.target.value)}
+                    onFocus={onFocus as any} onBlur={onBlur as any} required minLength={8} />
+                  {rp.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                        {[1,2,3,4].map(i => (
+                          <div key={i} style={{ flex: 1, height: 3, borderRadius: 99,
+                            background: i <= strength.score ? strength.color : 'var(--border)',
+                            transition: 'background 0.2s' }} />
+                        ))}
+                      </div>
+                      <span style={{ fontSize: 11, color: strength.color, fontWeight: 600 }}>{strength.label}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="form-group">
-                  <label className="form-label">I am joining as *</label>
-                  <select style={iStyle} value={role} onChange={e => setRole(e.target.value as UserRole)}
-                    onFocus={onFocus as any} onBlur={onBlur as any}>
-                    <option value="student">Student — I want to learn</option>
-                    <option value="mentor">Mentor — I want to teach</option>
-                  </select>
+                  <label className="form-label">Confirm Password *</label>
+                  <input id="input-reg-confirm" style={{
+                    ...iStyle, borderColor: rpc && rpc !== rp ? '#ef4444' : undefined,
+                  }} type="password" value={rpc} onChange={e => setRpc(e.target.value)}
+                    onFocus={onFocus as any} onBlur={onBlur as any} required minLength={8} />
+                  {rpc && rpc !== rp && (
+                    <span style={{ fontSize: 11, color: '#ef4444' }}>Passwords don't match</span>
+                  )}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">College / Organization</label>
-                    <input style={iStyle} type="text" value={college} onChange={e => setCollege(e.target.value)}
-                      onFocus={onFocus as any} onBlur={onBlur as any} placeholder="e.g. MIT Manipal" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Department</label>
-                    <input style={iStyle} type="text" value={dept} onChange={e => setDept(e.target.value)}
-                      onFocus={onFocus as any} onBlur={onBlur as any} placeholder="e.g. CSE" />
-                  </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg)', borderRadius: 8, lineHeight: 1.5 }}>
+                  ✨ After registering, you'll complete a quick setup to personalize your experience.
                 </div>
-                <button type="submit" className="btn btn-primary"
+                <button id="btn-register-submit" type="submit" className="btn btn-primary"
                   style={{ width: '100%', justifyContent: 'center', padding: '10px', marginTop: 4 }}
                   disabled={rloading}>
                   {rloading ? 'Creating account…' : 'Create Account'}
@@ -237,6 +266,38 @@ export const LoginPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Forgot Password modal */}
+      {showForgot && (
+        <div className="overlay" onClick={() => setShowForgot(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+            <div style={{ padding: 24 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Reset Password</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+                Enter your email and we'll send a reset link.
+              </p>
+              <form onSubmit={doForgot}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <input id="input-forgot-email" style={iStyle} type="email" value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)} placeholder="your@email.com" required />
+                  {forgotMsg && (
+                    <div style={{ fontSize: 13, color: forgotMsg.includes('sent') ? '#16a34a' : '#ef4444', fontWeight: 500 }}>
+                      {forgotMsg}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowForgot(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" disabled={forgotLoading}>
+                      {forgotLoading ? 'Sending…' : 'Send Reset Link'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

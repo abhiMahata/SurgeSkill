@@ -1,24 +1,25 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signInWithPopup, signOut, updateProfile as fbUpdateProfile,
+  signInWithPopup, signOut, updateProfile as fbUpdateProfile, sendPasswordResetEmail,
 } from 'firebase/auth';
 import {
-  doc, getDoc, setDoc, updateDoc, collection, getDocs, onSnapshot,
-  addDoc, deleteDoc, query, orderBy, limit, serverTimestamp, increment,
-  writeBatch,
+  doc, getDoc, setDoc, updateDoc, collection, onSnapshot,
+  addDoc, deleteDoc, query, orderBy, limit, increment,
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import type {
   User, UserRole, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage,
 } from '../types';
-import { DEFAULT_EVENTS, DEFAULT_HACKATHONS, DEFAULT_COURSES } from '../utils/seedData';
+import { hashPassword, verifyPassword } from '../utils/auth';
 
 export type { User, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage };
 
-// ── Hardcoded admin credentials (bypasses Firebase) ─────────────────────────
-const ADMIN_EMAIL    = 'admin@surgeskill.com';
-const ADMIN_PASSWORD = 'surgeadmin2026';
+export interface PendingGoogleUser { uid: string; name: string; email: string; photoURL: string; }
+
+// ── Admin credentials loaded from .env (never commit .env to git) ────────────
+const ADMIN_EMAIL    = (import.meta.env.VITE_ADMIN_EMAIL    as string | undefined) ?? '';
+const ADMIN_PASSWORD = (import.meta.env.VITE_ADMIN_PASSWORD as string | undefined) ?? '';
 const ADMIN_USER: User = {
   id: 'admin-local',
   name: 'Admin',
@@ -30,14 +31,19 @@ const ADMIN_USER: User = {
   enrolledCourses: [],
   registeredHackathons: [],
   joinedCommunities: [],
+  onboardingComplete: true, // admin skips onboarding
 };
 
 interface AppContextType {
   currentUser: User | null;
   authLoading: boolean;
+  pendingGoogleUser: PendingGoogleUser | null;
   login: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
-  register: (name: string, email: string, password: string, role: UserRole, extra?: Partial<User>) => Promise<{ success: boolean; message: string }>;
-  loginWithGoogle: () => Promise<{ success: boolean; message: string }>;
+  register: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; message: string; newUser?: boolean }>;
+  completeGoogleSignup: (role: UserRole) => Promise<{ success: boolean; message: string }>;
+  completeOnboarding: (data: { name: string; role: UserRole; age: string; country: string; state: string; city: string; college: string }) => Promise<{ success: boolean; message: string }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   updateProfile: (data: Partial<User> & { password?: string }) => Promise<boolean>;
   events: EventItem[];
@@ -76,16 +82,17 @@ function isFirebaseConfigured(): boolean {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const fbReady = isFirebaseConfigured();
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading]   = useState(true);
-  const [events, setEvents]             = useState<EventItem[]>([]);
-  const [hackathons, setHackathons]     = useState<Hackathon[]>([]);
-  const [courses, setCourses]           = useState<Course[]>([]);
-  const [communities, setCommunities]   = useState<Community[]>([]);
-  const [activities, setActivities]     = useState<ActivityLog[]>([]);
-  const [theme, setThemeState]          = useState<'light' | 'dark'>(() =>
+  const [currentUser, setCurrentUser]         = useState<User | null>(null);
+  const [authLoading, setAuthLoading]         = useState(true);
+  const [pendingGoogleUser, setPendingGoogleUser] = useState<PendingGoogleUser | null>(null);
+  const [events, setEvents]                   = useState<EventItem[]>([]);
+  const [hackathons, setHackathons]           = useState<Hackathon[]>([]);
+  const [courses, setCourses]                 = useState<Course[]>([]);
+  const [communities, setCommunities]         = useState<Community[]>([]);
+  const [activities, setActivities]           = useState<ActivityLog[]>([]);
+  const [theme, setThemeState]                = useState<'light' | 'dark'>(() =>
     (localStorage.getItem('ss_theme') as 'light' | 'dark') || 'light');
-  const [toast, setToast]               = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+  const [toast, setToast]                     = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
 
   const showToast = useCallback((message: string) => {
     setToast({ message, visible: true });
@@ -115,36 +122,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [theme]);
   const setTheme = (t: 'light' | 'dark') => setThemeState(t);
 
-  const seedLocalData = useCallback(() => {
-    const e = localStorage.getItem('ss_events');
-    if (!e) { localStorage.setItem('ss_events', JSON.stringify(DEFAULT_EVENTS)); setEvents(DEFAULT_EVENTS); }
-    else setEvents(JSON.parse(e));
-    const h = localStorage.getItem('ss_hackathons');
-    if (!h) { localStorage.setItem('ss_hackathons', JSON.stringify(DEFAULT_HACKATHONS)); setHackathons(DEFAULT_HACKATHONS); }
-    else setHackathons(JSON.parse(h));
-    const c = localStorage.getItem('ss_courses');
-    if (!c) { localStorage.setItem('ss_courses', JSON.stringify(DEFAULT_COURSES)); setCourses(DEFAULT_COURSES); }
-    else setCourses(JSON.parse(c));
-    const cm = localStorage.getItem('ss_communities');
-    if (cm) setCommunities(JSON.parse(cm));
-    const a = localStorage.getItem('ss_activities');
-    if (a) setActivities(JSON.parse(a));
-  }, []);
-
-  const seedFirestore = useCallback(async () => {
-    const snap = await getDocs(collection(db, 'events'));
-    if (snap.empty) {
-      const batch = writeBatch(db);
-      DEFAULT_EVENTS.forEach(ev => batch.set(doc(db, 'events', ev.id), ev));
-      DEFAULT_HACKATHONS.forEach(h => batch.set(doc(db, 'hackathons', h.id), h));
-      DEFAULT_COURSES.forEach(c => batch.set(doc(db, 'courses', c.id), c));
-      await batch.commit();
-    }
-  }, []);
 
   useEffect(() => {
     if (!fbReady) {
-      seedLocalData();
+      // Load only what the user has saved themselves — no defaults seeded
+      const e  = localStorage.getItem('ss_events');       if (e)  setEvents(JSON.parse(e));
+      const h  = localStorage.getItem('ss_hackathons');   if (h)  setHackathons(JSON.parse(h));
+      const c  = localStorage.getItem('ss_courses');      if (c)  setCourses(JSON.parse(c));
+      const cm = localStorage.getItem('ss_communities');  if (cm) setCommunities(JSON.parse(cm));
+      const a  = localStorage.getItem('ss_activities');   if (a)  setActivities(JSON.parse(a));
       const email = sessionStorage.getItem('ss_current_user');
       if (email === ADMIN_EMAIL) {
         setCurrentUser(ADMIN_USER);
@@ -157,7 +143,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    seedFirestore();
     const unsubs: (() => void)[] = [];
     unsubs.push(onSnapshot(collection(db, 'events'),      s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as EventItem)))));
     unsubs.push(onSnapshot(collection(db, 'hackathons'),  s => setHackathons(s.docs.map(d => ({ id: d.id, ...d.data() } as Hackathon)))));
@@ -180,16 +165,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     return () => { unsubAuth(); unsubs.forEach(u => u()); };
-  }, [fbReady, seedLocalData, seedFirestore]);
+  }, [fbReady]);
 
   const getLocalUsers = () => JSON.parse(localStorage.getItem('ss_users') || '[]');
   const saveLocalUsers = (u: any[]) => localStorage.setItem('ss_users', JSON.stringify(u));
   const persistLocal = (key: string, data: any) => localStorage.setItem(key, JSON.stringify(data));
 
-  // ── Login (no role param — unified) ─────────────────────────────────────
+  // ── Login ────────────────────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
-    // Admin intercept
-    if (email.trim().toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+    const normEmail = email.trim().toLowerCase();
+    // Admin intercept — credentials live in .env, not source code
+    if (ADMIN_EMAIL && normEmail === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
       sessionStorage.setItem('ss_current_user', ADMIN_EMAIL);
       setCurrentUser(ADMIN_USER);
       addActivity('Admin logged in');
@@ -198,19 +184,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (!fbReady) {
       const users = getLocalUsers();
-      const matched = users.find((u: any) => u.email === email);
-      if (!matched || matched.password !== password) return { success: false, message: 'Invalid credentials.' };
-      sessionStorage.setItem('ss_current_user', email);
-      const { password: _, ...safe } = matched;
+      const matched = users.find((u: any) => u.email === normEmail);
+      if (!matched) return { success: false, message: 'No account found with that email.' };
+      const valid = await verifyPassword(password, matched.password);
+      if (!valid) return { success: false, message: 'Incorrect password.' };
+      sessionStorage.setItem('ss_current_user', normEmail);
+      const { password: _pw, ...safe } = matched;
       setCurrentUser(safe);
       addActivity(`${matched.name} logged in`);
       return { success: true, message: 'Success' };
     }
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, normEmail, password);
       const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
       if (!userDoc.exists()) return { success: false, message: 'User profile not found.' };
-      const data = userDoc.data() as any;
+      const data = userDoc.data() as User;
       setCurrentUser({ id: cred.user.uid, ...data });
       addActivity(`${data.name} logged in`);
       return { success: true, message: 'Success' };
@@ -219,34 +207,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // ── Register ─────────────────────────────────────────────────────────────
-  const register = async (name: string, email: string, password: string, role: UserRole, extra?: Partial<User>) => {
+  // ── Register (minimal — onboarding collects name/role/location) ─────────
+  const register = async (email: string, password: string) => {
+    const normEmail = email.trim().toLowerCase();
     const profile: Omit<User, 'id'> = {
-      name, email, role,
-      designation: role === 'mentor' ? 'Mentor' : 'Student',
-      organization: extra?.organization || extra?.college || '',
+      name: normEmail.split('@')[0], email: normEmail, role: 'student',
+      designation: 'Student', organization: '',
       registeredEvents: [], enrolledCourses: [], registeredHackathons: [], joinedCommunities: [],
-      college: extra?.college || '', department: extra?.department || '',
-      yearOfStudy: extra?.yearOfStudy || '', phone: extra?.phone || '',
-      expertise: extra?.expertise || '', linkedin: extra?.linkedin || '',
+      onboardingComplete: false,
     };
     if (!fbReady) {
       const users = getLocalUsers();
-      if (users.some((u: any) => u.email === email)) return { success: false, message: 'Email already registered.' };
-      const newUser = { ...profile, id: `${role}-${Date.now()}`, password };
+      if (users.some((u: any) => u.email === normEmail)) return { success: false, message: 'Email already registered.' };
+      const hashed = await hashPassword(password);
+      const newUser = { ...profile, id: `student-${Date.now()}`, password: hashed };
       saveLocalUsers([...users, newUser]);
-      sessionStorage.setItem('ss_current_user', email);
-      const { password: _, ...safe } = newUser as any;
-      setCurrentUser(safe);
-      addActivity(`${name} registered as ${role}`);
+      sessionStorage.setItem('ss_current_user', normEmail);
+      const { password: _pw, ...safe } = newUser;
+      setCurrentUser(safe as User);
+      addActivity('New user registered');
       return { success: true, message: 'Success' };
     }
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await fbUpdateProfile(cred.user, { displayName: name });
+      const cred = await createUserWithEmailAndPassword(auth, normEmail, password);
       await setDoc(doc(db, 'users', cred.user.uid), profile);
       setCurrentUser({ id: cred.user.uid, ...profile });
-      addActivity(`${name} registered as ${role}`);
+      addActivity('New user registered');
       return { success: true, message: 'Success' };
     } catch (err: any) {
       return { success: false, message: err.message || 'Registration failed.' };
@@ -265,11 +251,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addActivity(`${result.user.displayName} logged in via Google`);
         return { success: true, message: 'Success' };
       }
+      // New Google user — create profile with onboardingComplete: false
+      // The OnboardingWizard will show automatically and collect the rest
       const profile: Omit<User, 'id'> = {
-        name: result.user.displayName || 'User', email: result.user.email || '',
-        role: 'student', designation: 'Student', organization: '',
+        name:     result.user.displayName || 'User',
+        email:    result.user.email       || '',
+        role:     'student', designation: 'Student', organization: '',
         registeredEvents: [], enrolledCourses: [], registeredHackathons: [], joinedCommunities: [],
         photoURL: result.user.photoURL || '',
+        onboardingComplete: false,
       };
       await setDoc(doc(db, 'users', uid), profile);
       setCurrentUser({ id: uid, ...profile });
@@ -277,6 +267,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true, message: 'Success' };
     } catch (err: any) {
       return { success: false, message: err.message || 'Google sign-in failed.' };
+    }
+  };
+
+  // ── Complete Google signup after role is chosen (kept for backward compat) ──
+  const completeGoogleSignup = async (role: UserRole) => {
+    if (!pendingGoogleUser) return { success: false, message: 'No pending sign-in.' };
+    const { uid, name, email, photoURL } = pendingGoogleUser;
+    const profile: Omit<User, 'id'> = {
+      name, email, role,
+      designation: role === 'mentor' ? 'Mentor' : 'Student',
+      organization: '',
+      registeredEvents: [], enrolledCourses: [], registeredHackathons: [], joinedCommunities: [],
+      photoURL, onboardingComplete: false,
+    };
+    try {
+      await setDoc(doc(db, 'users', uid), profile);
+      setCurrentUser({ id: uid, ...profile });
+      setPendingGoogleUser(null);
+      addActivity(`${name} registered via Google as ${role}`);
+      return { success: true, message: 'Success' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Could not complete sign-up.' };
+    }
+  };
+
+  // ── Complete Onboarding ─────────────────────────────────────────────
+  const completeOnboarding = async (data: {
+    name: string; role: UserRole; age: string;
+    country: string; state: string; city: string; college: string;
+  }) => {
+    if (!currentUser) return { success: false, message: 'Not logged in.' };
+    const update = {
+      name:               data.name,
+      role:               data.role,
+      age:                data.age,
+      country:            data.country,
+      state:              data.state,
+      city:               data.city,
+      college:            data.college,
+      organization:       data.college,
+      designation:        data.role === 'mentor' ? 'Mentor' : 'Student',
+      onboardingComplete: true,
+    };
+    try {
+      if (fbReady && currentUser.id !== 'admin-local') {
+        await updateDoc(doc(db, 'users', currentUser.id), update);
+        if (auth.currentUser) await fbUpdateProfile(auth.currentUser, { displayName: data.name });
+      } else {
+        const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, ...update } : u);
+        saveLocalUsers(users);
+      }
+      setCurrentUser(prev => prev ? { ...prev, ...update } : null);
+      addActivity(`${data.name} completed onboarding`);
+      return { success: true, message: 'Success' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Could not save onboarding data.' };
+    }
+  };
+
+  // ── Forgot Password ───────────────────────────────────────────────────────
+  const forgotPassword = async (email: string) => {
+    if (!fbReady) return { success: false, message: 'Password reset requires Firebase. Contact your admin.' };
+    try {
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      return { success: true, message: 'Reset email sent. Check your inbox.' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Could not send reset email.' };
     }
   };
 
@@ -466,7 +523,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      currentUser, authLoading, login, register, loginWithGoogle, logout, updateProfile: updateProfileFn,
+      currentUser, authLoading, pendingGoogleUser,
+      login, register, loginWithGoogle, completeGoogleSignup, completeOnboarding, forgotPassword, logout, updateProfile: updateProfileFn,
       events, createEvent, updateEvent, deleteEvent, toggleEventRegistration,
       hackathons, createHackathon, updateHackathon, deleteHackathon, toggleHackathonRegistration,
       courses, createCourse, updateCourse, deleteCourse, toggleCourseEnrollment,
