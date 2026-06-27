@@ -363,7 +363,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ── Events ────────────────────────────────────────────────────────────────
   const createEvent = async (data: Omit<EventItem, 'id' | 'registrationsCount' | 'status'>) => {
     const ev: EventItem = { ...data, id: `ev-${Date.now()}`, registrationsCount: 0, status: 'Confirmed',
-      image: data.image || 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&w=800&q=80',
+      image: data.image || '',
       createdBy: currentUser?.id || '' };
     if (fbReady) await setDoc(doc(db, 'events', ev.id), ev);
     else { const u = [...events, ev]; setEvents(u); persistLocal('ss_events', u); }

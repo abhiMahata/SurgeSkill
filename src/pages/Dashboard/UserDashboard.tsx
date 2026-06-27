@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 
@@ -8,29 +8,43 @@ const levelColor: Record<string, string> = {
   Advanced:     '#ef4444',
 };
 
+// Deterministic color from string — no Math.random()
+function seedColor(str: string): string {
+  const palette = [
+    'linear-gradient(135deg,#6366f1,#8b5cf6)',
+    'linear-gradient(135deg,#3b82f6,#06b6d4)',
+    'linear-gradient(135deg,#10b981,#3b82f6)',
+    'linear-gradient(135deg,#f59e0b,#ef4444)',
+    'linear-gradient(135deg,#8b5cf6,#ec4899)',
+    'linear-gradient(135deg,#06b6d4,#10b981)',
+  ];
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  return palette[Math.abs(hash) % palette.length];
+}
+
 export const UserDashboard: React.FC = () => {
   const { currentUser, events, courses, communities, toggleCourseEnrollment, toggleEventRegistration, showToast } = useApp();
   const navigate = useNavigate();
 
-  const enrolledIds  = currentUser?.enrolledCourses    ?? [];
-  const regEventIds  = currentUser?.registeredEvents   ?? [];
-  const joinedCommIds = currentUser?.joinedCommunities ?? [];
+  const enrolledIds   = currentUser?.enrolledCourses    ?? [];
+  const regEventIds   = currentUser?.registeredEvents   ?? [];
+  const joinedCommIds = currentUser?.joinedCommunities  ?? [];
 
-  const myCourses    = courses.filter(c => enrolledIds.includes(c.id));
-  const myComms      = communities.filter(c => joinedCommIds.includes(c.id));
-  const myEvents     = events.filter(e => regEventIds.includes(e.id));
-  const upcomingEvs  = events
-    .filter(e => new Date(e.date) > new Date() && e.status === 'Confirmed')
+  const myCourses  = courses.filter(c => enrolledIds.includes(c.id));
+  const myComms    = communities.filter(c => joinedCommIds.includes(c.id));
+  const myEvents   = events.filter(e => regEventIds.includes(e.id));
+
+  // Only show events that haven't passed yet, sorted by date
+  const upcomingEvs = events
+    .filter(e => new Date(e.date) >= new Date() && e.status !== 'Completed' && e.status !== 'Cancelled')
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 4);
 
-  // Featured courses not yet enrolled
-  const featuredCourses = courses
+  // Courses not yet enrolled in — only real ones from DB
+  const browseCourses = courses
     .filter(c => !enrolledIds.includes(c.id) && c.status === 'Active')
     .slice(0, 3);
-
-  // Unique mentors from all courses
-  const mentors = Array.from(new Set(courses.map(c => c.mentor))).slice(0, 4);
 
   const roleBadgeColor = currentUser?.role === 'mentor'
     ? 'linear-gradient(135deg,#8b5cf6,#6366f1)'
@@ -53,12 +67,13 @@ export const UserDashboard: React.FC = () => {
             </span>
           </div>
           <p className="page-desc">
-            {currentUser?.college ? `${currentUser.college} · ` : ''}{currentUser?.department || 'SurgeSkill Community'}
+            {currentUser?.college ? `${currentUser.college}` : 'SurgeSkill Community'}
+            {currentUser?.city ? ` · ${currentUser.city}` : ''}
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/explore')}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>travel_explore</span>
-          Explore Courses
+          Explore
         </button>
       </div>
 
@@ -80,9 +95,9 @@ export const UserDashboard: React.FC = () => {
           <div className="stat-sub">registered</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-label">Mentors</div>
-          <div className="stat-value">{mentors.length}</div>
-          <div className="stat-sub">on the platform</div>
+          <div className="stat-label">Upcoming</div>
+          <div className="stat-value">{upcomingEvs.length}</div>
+          <div className="stat-sub">events on platform</div>
         </div>
       </div>
 
@@ -97,7 +112,7 @@ export const UserDashboard: React.FC = () => {
               <div className="card-subtitle">{myCourses.length} enrolled</div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => navigate('/explore')}>
-              Browse more
+              Browse
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_forward</span>
             </button>
           </div>
@@ -106,9 +121,12 @@ export const UserDashboard: React.FC = () => {
             <div className="empty-state">
               <span className="material-symbols-outlined empty-icon">school</span>
               <div className="empty-title">No courses yet</div>
-              <div className="empty-desc">Browse and enroll in courses taught by mentors in your community.</div>
+              <div className="empty-desc">
+                Courses are created by mentors in your community.<br />
+                Check Explore to see what's available.
+              </div>
               <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => navigate('/explore')}>
-                Find Courses
+                Go to Explore
               </button>
             </div>
           ) : (
@@ -117,7 +135,7 @@ export const UserDashboard: React.FC = () => {
                 <div key={c.id} className="event-row" style={{ cursor: 'default' }}>
                   <div style={{
                     width: 44, height: 44, borderRadius: 'var(--radius-md)', flexShrink: 0,
-                    background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                    background: seedColor(c.id),
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 20 }}>menu_book</span>
@@ -168,7 +186,9 @@ export const UserDashboard: React.FC = () => {
             </div>
             {myComms.length === 0 ? (
               <div style={{ padding: '16px', textAlign: 'center' }}>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>You haven't joined any communities yet.</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                  You haven't joined any communities yet.
+                </div>
                 <button className="btn btn-secondary btn-sm" onClick={() => navigate('/communities')}>
                   <span className="material-symbols-outlined" style={{ fontSize: 14 }}>groups</span>
                   Browse Communities
@@ -187,9 +207,7 @@ export const UserDashboard: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{
                         width: 32, height: 32, borderRadius: 'var(--radius-md)', flexShrink: 0,
-                        background: c.type === 'college'
-                          ? 'linear-gradient(135deg,#3b82f6,#8b5cf6)'
-                          : 'linear-gradient(135deg,#10b981,#3b82f6)',
+                        background: seedColor(c.id),
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
                         <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#fff' }}>
@@ -233,18 +251,26 @@ export const UserDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Upcoming Events ──────────────────────────────────────── */}
+      {/* ── Upcoming Events ─────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
           <div>
             <div className="card-title">Upcoming Events</div>
-            <div className="card-subtitle">Platform-wide events you can register for</div>
+            <div className="card-subtitle">Events created by the community</div>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={() => navigate('/explore')}>See all</button>
         </div>
         {upcomingEvs.length === 0 ? (
-          <div className="empty-state" style={{ padding: '24px' }}>
-            <div className="empty-desc">No upcoming events right now. Check back soon!</div>
+          <div className="empty-state" style={{ padding: '32px' }}>
+            <span className="material-symbols-outlined empty-icon" style={{ fontSize: 36 }}>event_available</span>
+            <div className="empty-title">No upcoming events yet</div>
+            <div className="empty-desc">
+              Events are created by community admins.<br />
+              Join a community and ask your admin to create one!
+            </div>
+            <button className="btn btn-secondary" style={{ marginTop: 12 }} onClick={() => navigate('/communities')}>
+              Browse Communities
+            </button>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 0 }}>
@@ -256,7 +282,7 @@ export const UserDashboard: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                     <div style={{
                       width: 42, height: 42, borderRadius: 'var(--radius-md)', flexShrink: 0,
-                      background: 'linear-gradient(135deg,#f59e0b,#ef4444)',
+                      background: seedColor(ev.id),
                       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                     }}>
                       <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{d.getDate()}</div>
@@ -289,23 +315,23 @@ export const UserDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* ── Featured Courses by Mentors ──────────────────────────── */}
-      {featuredCourses.length > 0 && (
+      {/* ── Browse Courses (only if courses actually exist) ──────── */}
+      {browseCourses.length > 0 && (
         <div className="card">
           <div className="card-header">
             <div>
-              <div className="card-title">Recommended for You</div>
-              <div className="card-subtitle">Courses taught by SurgeSkill mentors</div>
+              <div className="card-title">Courses Available</div>
+              <div className="card-subtitle">Created by mentors on SurgeSkill</div>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/explore')}>See all courses</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/explore')}>See all</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}>
-            {featuredCourses.map((c, i) => (
+            {browseCourses.map((c, i) => (
               <div key={c.id} style={{ padding: '16px', borderRight: i < 2 ? '1px solid var(--border)' : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <div style={{
                     width: 36, height: 36, borderRadius: 'var(--radius-sm)', flexShrink: 0,
-                    background: ['linear-gradient(135deg,#6366f1,#8b5cf6)', 'linear-gradient(135deg,#10b981,#3b82f6)', 'linear-gradient(135deg,#f59e0b,#ef4444)'][i % 3],
+                    background: seedColor(c.id),
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 18 }}>menu_book</span>

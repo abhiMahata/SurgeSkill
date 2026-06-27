@@ -168,7 +168,7 @@ export const ManageContent: React.FC = () => {
                     <div className="form-group"><label className="form-label">Capacity</label><input type="number" min={1} style={iStyle} value={evForm.capacity ?? 100} onChange={e => setEvForm(p => ({ ...p, capacity: parseInt(e.target.value) }))} /></div>
                     <div className="form-group"><label className="form-label">Price</label><input style={iStyle} value={evForm.price ?? ''} onChange={e => setEvForm(p => ({ ...p, price: e.target.value }))} /></div>
                   </div>
-                  <div className="form-group"><label className="form-label">Image URL</label><input type="url" style={iStyle} value={evForm.image ?? ''} onChange={e => setEvForm(p => ({ ...p, image: e.target.value }))} /></div>
+
                   <div className="form-group"><label className="form-label">Description *</label><textarea rows={3} style={{ ...iStyle, resize: 'vertical' } as any} value={evForm.description ?? ''} onChange={e => setEvForm(p => ({ ...p, description: e.target.value }))} required /></div>
                 </div>
                 <div className="panel-footer"><button type="button" className="btn btn-secondary" onClick={closePanel}>Cancel</button><button type="submit" className="btn btn-primary">{editId ? 'Save' : 'Publish'}</button></div>
@@ -193,7 +193,7 @@ export const ManageContent: React.FC = () => {
                     <div className="form-group"><label className="form-label">Capacity</label><input type="number" min={1} style={iStyle} value={hackForm.capacity ?? 200} onChange={e => setHackForm(p => ({ ...p, capacity: parseInt(e.target.value) }))} /></div>
                   </div>
                   <div className="form-group"><label className="form-label">Prizes (comma-separated)</label><input style={iStyle} value={(hackForm.prizes || []).join(', ')} onChange={e => setHackForm(p => ({ ...p, prizes: e.target.value.split(',').map(s => s.trim()) }))} /></div>
-                  <div className="form-group"><label className="form-label">Image URL</label><input type="url" style={iStyle} value={hackForm.image ?? ''} onChange={e => setHackForm(p => ({ ...p, image: e.target.value }))} /></div>
+
                   <div className="form-group"><label className="form-label">Description *</label><textarea rows={3} style={{ ...iStyle, resize: 'vertical' } as any} value={hackForm.description ?? ''} onChange={e => setHackForm(p => ({ ...p, description: e.target.value }))} required /></div>
                 </div>
                 <div className="panel-footer"><button type="button" className="btn btn-secondary" onClick={closePanel}>Cancel</button><button type="submit" className="btn btn-primary">{editId ? 'Save' : 'Publish'}</button></div>
@@ -214,7 +214,7 @@ export const ManageContent: React.FC = () => {
                     <div className="form-group"><label className="form-label">Price</label><input style={iStyle} value={courseForm.price ?? ''} onChange={e => setCourseForm(p => ({ ...p, price: e.target.value }))} placeholder="Free or $49" /></div>
                   </div>
                   <div className="form-group"><label className="form-label">Syllabus (comma-separated)</label><input style={iStyle} value={(courseForm.syllabus || []).join(', ')} onChange={e => setCourseForm(p => ({ ...p, syllabus: e.target.value.split(',').map(s => s.trim()) }))} /></div>
-                  <div className="form-group"><label className="form-label">Image URL</label><input type="url" style={iStyle} value={courseForm.image ?? ''} onChange={e => setCourseForm(p => ({ ...p, image: e.target.value }))} /></div>
+
                   <div className="form-group"><label className="form-label">Description *</label><textarea rows={3} style={{ ...iStyle, resize: 'vertical' } as any} value={courseForm.description ?? ''} onChange={e => setCourseForm(p => ({ ...p, description: e.target.value }))} required /></div>
                 </div>
                 <div className="panel-footer"><button type="button" className="btn btn-secondary" onClick={closePanel}>Cancel</button><button type="submit" className="btn btn-primary">{editId ? 'Save' : 'Publish'}</button></div>

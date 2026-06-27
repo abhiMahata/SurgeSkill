@@ -171,7 +171,21 @@ export const MyCalendar: React.FC = () => {
       {selected && (
         <div className="overlay" onClick={() => setSelected(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <img src={selected.image} alt={selected.title} style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block', borderRadius: '14px 14px 0 0' }} />
+            {/* Color header instead of image */}
+            <div style={{
+              width: '100%', height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: (() => {
+                const palette = ['linear-gradient(135deg,#6366f1,#8b5cf6)','linear-gradient(135deg,#3b82f6,#06b6d4)','linear-gradient(135deg,#10b981,#3b82f6)','linear-gradient(135deg,#f59e0b,#ef4444)','linear-gradient(135deg,#8b5cf6,#ec4899)','linear-gradient(135deg,#06b6d4,#10b981)'];
+                let hash = 0;
+                for (let i = 0; i < selected.id.length; i++) hash = (hash * 31 + selected.id.charCodeAt(i)) | 0;
+                return palette[Math.abs(hash) % palette.length];
+              })(),
+              borderRadius: '14px 14px 0 0',
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'rgba(255,255,255,0.9)' }}>
+                {selected.isHackathon ? 'code' : 'event'}
+              </span>
+            </div>
             <div style={{ padding: '20px 24px 24px' }}>
               <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
                 {selected.isHackathon ? <span className="badge badge-blue">Hackathon</span> : <span className="badge badge-gray">{selected.type}</span>}
