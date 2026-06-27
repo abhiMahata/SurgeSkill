@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import type { UserRole } from '../../types';
 import { COUNTRIES, getStates, getCities, getColleges } from '../../utils/locationData';
 
 const sel: React.CSSProperties = {
@@ -20,9 +19,8 @@ export const OnboardingWizard: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   // Step 1
-  const [name, setName]   = useState(currentUser?.name || '');
-  const [role, setRole]   = useState<UserRole>(currentUser?.role || 'student');
-  const [age, setAge]     = useState('');
+  const [name, setName] = useState(currentUser?.name || '');
+  const [age, setAge]   = useState('');
 
   // Step 2
   const [country, setCountry] = useState('India');
@@ -40,7 +38,7 @@ export const OnboardingWizard: React.FC = () => {
   const handleFinish = async () => {
     if (!canStep2) return;
     setLoading(true);
-    const res = await completeOnboarding({ name: name.trim(), role, age, country, state, city, college });
+    const res = await completeOnboarding({ name: name.trim(), role: 'student', age, country, state, city, college });
     setLoading(false);
     if (res.success) showToast(`Welcome to SurgeSkill, ${name.split(' ')[0]}! 🎉`);
   };
@@ -102,30 +100,7 @@ export const OnboardingWizard: React.FC = () => {
                   <input style={inp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Arjun Sharma" />
                 </div>
 
-                {/* Role */}
-                <div>
-                  <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>
-                    I am joining as *
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    {([
-                      ['student', 'school', 'Student', 'Here to learn & explore'],
-                      ['mentor',  'person_celebrate', 'Mentor', 'Here to teach & guide'],
-                    ] as const).map(([r, icon, label, desc]) => (
-                      <button key={r} type="button" onClick={() => setRole(r as UserRole)}
-                        style={{
-                          padding: '14px 12px', borderRadius: 10, cursor: 'pointer',
-                          border: `2px solid ${role === r ? '#6366f1' : 'var(--border)'}`,
-                          background: role === r ? 'rgba(99,102,241,0.06)' : '#fff',
-                          textAlign: 'left', transition: 'all 150ms',
-                        }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 22, color: role === r ? '#6366f1' : 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{icon}</span>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>{label}</div>
-                        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>{desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+
 
                 {/* Age */}
                 <div>
@@ -210,7 +185,7 @@ export const OnboardingWizard: React.FC = () => {
                 {city && colleges.length > 0 && (
                   <div>
                     <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
-                      {role === 'mentor' ? 'Organization / University *' : 'College / University *'}
+                      College / University *
                     </label>
                     <select style={sel} value={college} onChange={e => setCollege(e.target.value)}>
                       <option value="">Select institution…</option>
