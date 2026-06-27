@@ -112,9 +112,11 @@ export const LoginPage: React.FC = () => {
           style={{ background: 'linear-gradient(160deg, rgba(8,4,22,0.95) 0%, rgba(14,10,45,0.88) 55%, rgba(22,16,70,0.80) 100%)' }}
         />
         <div className="auth-panel-content">
-          <div style={{ display: 'inline-block', background: '#fff', borderRadius: 10, padding: '8px 16px' }}>
-            <img src="/logo.png" alt="SurgeSkill" style={{ height: 36, objectFit: 'contain', display: 'block' }} />
-          </div>
+          <img
+            src="/logo.png"
+            alt="SurgeSkill"
+            style={{ height: 52, objectFit: 'contain', display: 'block', mixBlendMode: 'screen' }}
+          />
         </div>
         <div className="auth-panel-content">
           <p style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>
@@ -140,7 +142,7 @@ export const LoginPage: React.FC = () => {
       {/* Right panel */}
       <div className="auth-form-side">
         <div className="auth-form-wrap">
-          <img src="/logo.png" alt="SurgeSkill" style={{ height: 40, objectFit: 'contain', marginBottom: 32 }} />
+          <img src="/logo.png" alt="SurgeSkill" style={{ height: 36, objectFit: 'contain', marginBottom: 32 }} />
 
           <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 6 }}>
             {tab === 'login' ? 'Welcome back' : 'Join SurgeSkill'}
