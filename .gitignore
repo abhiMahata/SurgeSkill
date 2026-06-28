@@ -34,4 +34,4 @@ task.md
 walkthrough.md
 
 # Ignored assets
-logo.png
+# logo.png — intentionally tracked for deployment

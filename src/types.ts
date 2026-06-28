@@ -110,4 +110,13 @@ export interface ChatMessage {
   mediaBase64?: string;
   mediaType?: string;
   timestamp: number;
+  reactions?: Record<string, string[]>; // emoji → [userId, ...]
+  replyTo?: { id: string; text: string; senderName: string };
+  edited?: boolean;
+}
+
+export interface TypingUser {
+  userId: string;
+  name: string;
+  ts: number; // epoch ms — used to auto-expire stale typing signals
 }
