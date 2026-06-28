@@ -5,15 +5,15 @@ import {
 } from 'firebase/auth';
 import {
   doc, getDoc, setDoc, updateDoc, collection, onSnapshot,
-  addDoc, deleteDoc, query, orderBy, limit, increment,
+  addDoc, deleteDoc, query, orderBy, limit, increment, serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import type {
-  User, UserRole, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage,
+  User, UserRole, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser,
 } from '../types';
 import { hashPassword, verifyPassword } from '../utils/auth';
 
-export type { User, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage };
+export type { User, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser };
 
 export interface PendingGoogleUser { uid: string; name: string; email: string; photoURL: string; }
 
@@ -71,6 +71,9 @@ interface AppContextType {
   setTheme: (t: 'light' | 'dark') => void;
   toast: { message: string; visible: boolean };
   showToast: (msg: string) => void;
+  typingUsers: TypingUser[];
+  setTyping: (communityId: string, isTyping: boolean) => void;
+  subscribeTyping: (communityId: string) => () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -93,6 +96,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [theme, setThemeState]                = useState<'light' | 'dark'>(() =>
     (localStorage.getItem('ss_theme') as 'light' | 'dark') || 'light');
   const [toast, setToast]                     = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+  const [typingUsers, setTypingUsers]         = useState<TypingUser[]>([]);
+  const typingTimerRef                        = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((message: string) => {
     setToast({ message, visible: true });
@@ -463,7 +468,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ── Communities ───────────────────────────────────────────────────────────
+  // ── Typing indicator ─────────────────────────────────────────────────────
+  const setTyping = useCallback((communityId: string, isTyping: boolean) => {
+    if (!currentUser || !fbReady) return;
+    const ref = doc(db, 'communities', communityId, 'typing', currentUser.id);
+    if (isTyping) {
+      setDoc(ref, { userId: currentUser.id, name: currentUser.name, ts: Date.now() }).catch(() => {});
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        deleteDoc(ref).catch(() => {});
+      }, 3500);
+    } else {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      deleteDoc(ref).catch(() => {});
+    }
+  }, [currentUser, fbReady]);
+
+  const subscribeTyping = useCallback((communityId: string) => {
+    if (!fbReady) return () => {};
+    const q = collection(db, 'communities', communityId, 'typing');
+    return onSnapshot(q, snap => {
+      const now = Date.now();
+      const live = snap.docs
+        .map(d => d.data() as TypingUser)
+        .filter(t => t.userId !== currentUser?.id && now - t.ts < 5000);
+      setTypingUsers(live);
+    });
+  }, [currentUser, fbReady]);
+
+  // ── Communities ───────────────────────────────────────────────────────────
   const createCommunity = async (data: Omit<Community, 'id' | 'memberIds'>) => {
+    if (currentUser?.role !== 'admin') throw new Error('Only admins can create communities.');
     const memberIds = [currentUser?.id || ''];
     if (fbReady) {
       // Don't embed a custom `id` — let Firestore generate the document ID.
@@ -530,6 +565,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       courses, createCourse, updateCourse, deleteCourse, toggleCourseEnrollment,
       communities, createCommunity, joinCommunity, leaveCommunity,
       activities, addActivity, theme, setTheme, toast, showToast,
+      typingUsers, setTyping, subscribeTyping,
     }}>
       {children}
     </AppContext.Provider>

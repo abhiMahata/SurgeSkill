@@ -1,49 +1,123 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import type { Community } from '../../context/AppContext';
+
+const iStyle: React.CSSProperties = {
+  width: '100%', padding: '8px 11px', fontSize: 14,
+  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+  background: 'var(--surface)', color: 'var(--text-primary)',
+  outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box',
+};
 
 export const Communities: React.FC = () => {
   const { currentUser, communities, createCommunity, joinCommunity, leaveCommunity, showToast } = useApp();
   const navigate = useNavigate();
-  const [q, setQ] = useState('');
+
+  const [q, setQ]               = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [name, setName] = useState('');
-  const [desc, setDesc] = useState('');
+  const [name, setName]         = useState('');
+  const [desc, setDesc]         = useState('');
+  const [type, setType]         = useState<'college' | 'interest'>('college');
+  const [targetCollege, setTargetCollege] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  const iStyle: React.CSSProperties = { width: '100%', padding: '8px 11px', fontSize: 14, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' };
+  const isAdmin     = currentUser?.role === 'admin';
+  const myCollege   = currentUser?.college ?? '';
 
-  const myCollege = currentUser?.college;
-  const collegeCommunities = communities.filter(c => c.type === 'college');
-  const interestCommunities = communities.filter(c => c.type === 'interest');
+  /* ── Visibility filter ──────────────────────────────────────────────────
+     College communities: only show to users whose college matches (admins see all).
+     Interest communities: visible to everyone.
+  ──────────────────────────────────────────────────────────────────────── */
+  const visibleCommunities = communities.filter(c => {
+    if (c.type === 'college' && c.college && !isAdmin) {
+      return c.college === myCollege;
+    }
+    return true;
+  });
 
-  const filtered = (list: typeof communities) =>
-    list.filter(c => !q || c.name.toLowerCase().includes(q.toLowerCase()) || (c.description || '').toLowerCase().includes(q.toLowerCase()));
+  const filtered = (list: Community[]) =>
+    list.filter(c =>
+      !q ||
+      c.name.toLowerCase().includes(q.toLowerCase()) ||
+      (c.description || '').toLowerCase().includes(q.toLowerCase())
+    );
 
-  const isMember = (c: typeof communities[0]) => c.memberIds?.includes(currentUser?.id || '');
+  const myCollegeCommunities  = filtered(visibleCommunities.filter(c => c.type === 'college' && (!c.college || c.college === myCollege)));
+  const otherCollegeCommunities = isAdmin
+    ? filtered(visibleCommunities.filter(c => c.type === 'college' && c.college && c.college !== myCollege))
+    : [];
+  const interestCommunities   = filtered(visibleCommunities.filter(c => c.type === 'interest'));
+
+  const isMember = (c: Community) => c.memberIds?.includes(currentUser?.id || '');
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const id = await createCommunity({ name, description: desc, type: 'interest', createdBy: currentUser?.id || '', image: '' });
-    showToast(`Created "${name}"`);
-    setShowCreate(false); setName(''); setDesc('');
+    if (type === 'college' && !targetCollege.trim()) {
+      showToast('Please specify the college name.');
+      return;
+    }
+    setCreating(true);
+    try {
+      await createCommunity({
+        name: name.trim(),
+        description: desc.trim(),
+        type,
+        college: type === 'college' ? targetCollege.trim() : undefined,
+        createdBy: currentUser?.id || '',
+        image: '',
+      });
+      showToast(`Community "${name}" created!`);
+      setShowCreate(false);
+      setName(''); setDesc(''); setType('college'); setTargetCollege('');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to create community.');
+    }
+    setCreating(false);
   };
 
-  const CommunityCard = ({ c }: { c: typeof communities[0] }) => {
+  /* ── Community Card ───────────────────────────────────────────────────── */
+  const CommunityCard = ({ c }: { c: Community }) => {
     const member = isMember(c);
+    const isCollege = c.type === 'college';
+    const accentGrad = isCollege
+      ? 'linear-gradient(90deg, #2563EB, #7C3AED)'
+      : 'linear-gradient(90deg, #16A34A, #2563EB)';
+
     return (
       <div className="card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ height: 6, background: c.type === 'college' ? 'linear-gradient(90deg, var(--blue), var(--purple))' : 'linear-gradient(90deg, var(--green), var(--blue))' }} />
+        <div style={{ height: 5, background: accentGrad }} />
         <div style={{ padding: '18px 20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-            <span className={`badge ${c.type === 'college' ? 'badge-blue' : 'badge-green'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>{c.type === 'college' ? 'school' : 'interests'}</span>
-              {c.type === 'college' ? 'College' : 'Interest'}
+
+          {/* Badges row */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            <span className={`badge ${isCollege ? 'badge-blue' : 'badge-green'}`}>
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
+                {isCollege ? 'school' : 'interests'}
+              </span>
+              {isCollege ? 'College' : 'Interest'}
             </span>
+            {c.college && (
+              <span className="badge badge-gray" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 12 }}>location_city</span>
+                {c.college}
+              </span>
+            )}
             {member && <span className="badge badge-purple">Joined</span>}
           </div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4, letterSpacing: '-0.01em' }}>{c.name}</div>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 14, flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description || 'A community for members to connect and share.'}</p>
+
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4, letterSpacing: '-0.01em' }}>
+            {c.name}
+          </div>
+          <p style={{
+            fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 14, flex: 1,
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}>
+            {c.description || 'A community for members to connect and share.'}
+          </p>
+
+          {/* Footer row */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>group</span>
@@ -53,17 +127,28 @@ export const Communities: React.FC = () => {
               {member ? (
                 <>
                   <button className="btn btn-primary btn-sm" onClick={() => navigate(`/communities/${c.id}`)}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>chat</span>Open Chat
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>forum</span>
+                    Open Chat
                   </button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => { leaveCommunity(c.id); showToast(`Left "${c.name}"`); }}>Leave</button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--red)' }}
+                    onClick={() => { leaveCommunity(c.id); showToast(`Left "${c.name}"`); }}
+                  >
+                    Leave
+                  </button>
                 </>
               ) : (
-                <button className="btn btn-secondary btn-sm" onClick={async () => {
-                  await joinCommunity(c.id);
-                  showToast(`Joined "${c.name}"!`);
-                  navigate(`/communities/${c.id}`);
-                }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_add</span>Join & Open
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    await joinCommunity(c.id);
+                    showToast(`Joined "${c.name}"!`);
+                    navigate(`/communities/${c.id}`);
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_add</span>
+                  Join & Open
                 </button>
               )}
             </div>
@@ -73,88 +158,160 @@ export const Communities: React.FC = () => {
     );
   };
 
+  /* ── Section renderer ─────────────────────────────────────────────────── */
+  const Section = ({ title, icon, list }: { title: string; icon: string; list: Community[] }) => {
+    if (list.length === 0) return null;
+    return (
+      <>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 15 }}>{icon}</span>
+          {title}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
+          {list.map(c => <CommunityCard key={c.id} c={c} />)}
+        </div>
+      </>
+    );
+  };
+
+  /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div style={{ maxWidth: 940 }}>
+    <div style={{ maxWidth: 960 }}>
+      {/* Page header */}
       <div className="page-header">
         <div>
           <h1 className="page-title">Communities</h1>
-          <p className="page-desc">Connect with peers from your college and interest groups.</p>
+          <p className="page-desc">
+            {myCollege
+              ? `Showing communities for ${myCollege} and open interest groups.`
+              : 'Connect with peers across interest groups.'}
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-          New Community
-        </button>
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+            New Community
+          </button>
+        )}
       </div>
 
       {/* Search */}
-      <div className="search-wrap" style={{ maxWidth: 340, marginBottom: 20 }}>
+      <div className="search-wrap" style={{ maxWidth: 340, marginBottom: 24 }}>
         <span className="material-symbols-outlined ms" style={{ fontSize: 16 }}>search</span>
         <input className="search-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Search communities…" />
       </div>
 
-      {/* ── Your College Communities ───────────────────────── */}
-      {myCollege && (() => {
-        const myCollegeCommunities = filtered(collegeCommunities).filter(
-          c => c.college === myCollege || c.name.toLowerCase().includes(myCollege.toLowerCase())
-        );
-        if (myCollegeCommunities.length === 0) return null;
-        return (
-          <>
-            <div style={{
-              fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-              marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <span style={{
-                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                borderRadius: 6, padding: '3px 7px', fontSize: 11, color: '#fff', fontWeight: 700,
-              }}>YOUR COLLEGE</span>
-              {myCollege}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
-              {myCollegeCommunities.map(c => <CommunityCard key={c.id} c={c} />)}
-            </div>
-          </>
-        );
-      })()}
-
-      {/* College Communities */}
-      {filtered(collegeCommunities).length > 0 && (
-        <>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>school</span>All College Communities
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
-            {filtered(collegeCommunities).map(c => <CommunityCard key={c.id} c={c} />)}
-          </div>
-        </>
-      )}
-
-      {/* Interest Communities */}
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>interests</span>Interest Communities
-      </div>
-      {filtered(interestCommunities).length === 0 ? (
-        <div className="card"><div className="empty-state"><span className="material-symbols-outlined empty-icon">group_off</span><div className="empty-title">No communities yet</div><div className="empty-desc">Create one to start connecting with others.</div></div></div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {filtered(interestCommunities).map(c => <CommunityCard key={c.id} c={c} />)}
+      {/* Non-admin notice when no college set */}
+      {!myCollege && !isAdmin && (
+        <div style={{ background: 'var(--amber-light)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--amber)' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>info</span>
+          College communities are only visible after completing onboarding with your institution.
         </div>
       )}
 
-      {/* Create Modal */}
-      {showCreate && (
+      {/* Your college communities */}
+      <Section
+        title={myCollege ? `${myCollege} — Your College` : 'College Communities'}
+        icon="school"
+        list={myCollegeCommunities}
+      />
+
+      {/* Admin: other college communities */}
+      {isAdmin && otherCollegeCommunities.length > 0 && (
+        <Section title="Other College Communities" icon="corporate_fare" list={otherCollegeCommunities} />
+      )}
+
+      {/* Interest communities */}
+      <Section title="Interest Communities" icon="interests" list={interestCommunities} />
+
+      {/* Empty state */}
+      {myCollegeCommunities.length === 0 && interestCommunities.length === 0 && (
+        <div className="card">
+          <div className="empty-state">
+            <span className="material-symbols-outlined empty-icon">group_off</span>
+            <div className="empty-title">No communities yet</div>
+            <div className="empty-desc">
+              {isAdmin ? 'Create the first community using the button above.' : 'Ask your admin to create communities for your college.'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create modal — admin only */}
+      {showCreate && isAdmin && (
         <div className="overlay" onClick={() => setShowCreate(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div style={{ padding: '24px' }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div style={{ padding: 24 }}>
               <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Create Community</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>Start a new interest-based community.</p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+                Set up a college-specific or interest-based community.
+              </p>
+
               <form onSubmit={handleCreate}>
-                <div className="form-group" style={{ marginBottom: 14 }}><label className="form-label">Name *</label><input style={iStyle} value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. Web Dev Enthusiasts" /></div>
-                <div className="form-group" style={{ marginBottom: 20 }}><label className="form-label">Description</label><textarea rows={3} style={{ ...iStyle, resize: 'vertical' } as any} value={desc} onChange={e => setDesc(e.target.value)} placeholder="What is this community about?" /></div>
+                {/* Type selector */}
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">Type *</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {(['college', 'interest'] as const).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setType(t)}
+                        style={{
+                          flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600,
+                          borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                          border: `1px solid ${type === t ? 'var(--blue)' : 'var(--border)'}`,
+                          background: type === t ? 'var(--blue-light)' : 'var(--surface)',
+                          color: type === t ? 'var(--blue)' : 'var(--text-secondary)',
+                          transition: 'all 120ms',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>
+                          {t === 'college' ? 'school' : 'interests'}
+                        </span>
+                        {t === 'college' ? 'College' : 'Interest'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* College name — only for college type */}
+                {type === 'college' && (
+                  <div className="form-group" style={{ marginBottom: 14 }}>
+                    <label className="form-label">College Name *</label>
+                    <input
+                      style={iStyle}
+                      value={targetCollege}
+                      onChange={e => setTargetCollege(e.target.value)}
+                      required
+                      placeholder="e.g. MIT, IIT Bombay"
+                    />
+                    <span className="form-hint">Only students from this college will see this community.</span>
+                  </div>
+                )}
+
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">Community Name *</label>
+                  <input style={iStyle} value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. CSE Batch 2025" />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 20 }}>
+                  <label className="form-label">Description</label>
+                  <textarea
+                    rows={3}
+                    style={{ ...iStyle, resize: 'vertical' } as any}
+                    value={desc}
+                    onChange={e => setDesc(e.target.value)}
+                    placeholder="What is this community about?"
+                  />
+                </div>
+
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">Create</button>
+                  <button type="submit" className="btn btn-primary" disabled={creating}>
+                    {creating ? 'Creating…' : 'Create Community'}
+                  </button>
                 </div>
               </form>
             </div>
