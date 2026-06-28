@@ -5,7 +5,7 @@ import type { EventItem, Hackathon, Course } from '../../types';
 type Tab = 'events' | 'hackathons' | 'courses';
 type PanelMode = null | 'event' | 'hackathon' | 'course';
 
-const iStyle: React.CSSProperties = { width: '100%', padding: '7px 10px', fontSize: 13.5, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text-primary)', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' };
+const iStyle: React.CSSProperties = { width: '100%', padding: '7px 10px', fontSize: 13.5, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' };
 
 export const ManageContent: React.FC = () => {
   const { events, hackathons, courses, createEvent, updateEvent, deleteEvent, createHackathon, updateHackathon, deleteHackathon, createCourse, updateCourse, deleteCourse, showToast } = useApp();

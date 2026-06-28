@@ -8,7 +8,7 @@ const BG = 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=fo
 const iStyle: React.CSSProperties = {
   width: '100%', padding: '9px 12px', fontSize: 14,
   border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-  background: '#fff', color: 'var(--text-primary)',
+  background: 'var(--surface)', color: 'var(--text-primary)',
   outline: 'none', fontFamily: 'Inter, sans-serif',
   transition: 'border-color 120ms, box-shadow 120ms', boxSizing: 'border-box',
 };
@@ -171,7 +171,7 @@ export const LoginPage: React.FC = () => {
             style={{
               width: '100%', padding: '9px', fontSize: 13.5, fontWeight: 500,
               border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-              background: '#fff', color: 'var(--text-primary)', cursor: 'pointer',
+              background: 'var(--surface)', color: 'var(--text-primary)', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               marginBottom: 16, transition: 'border-color 120ms',
             }}

@@ -10,7 +10,7 @@ export const Communities: React.FC = () => {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
 
-  const iStyle: React.CSSProperties = { width: '100%', padding: '8px 11px', fontSize: 14, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text-primary)', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' };
+  const iStyle: React.CSSProperties = { width: '100%', padding: '8px 11px', fontSize: 14, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' };
 
   const myCollege = currentUser?.college;
   const collegeCommunities = communities.filter(c => c.type === 'college');

@@ -1,11 +1,28 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
+/* ── Inline styles for the toggle switch ── */
+const toggleTrack = (on: boolean): React.CSSProperties => ({
+  position: 'relative', display: 'inline-flex', alignItems: 'center',
+  width: 44, height: 24, borderRadius: 9999,
+  background: on ? '#18181B' : 'var(--border)',
+  cursor: 'pointer', transition: 'background 200ms', flexShrink: 0,
+  border: '1px solid ' + (on ? '#3d3d3d' : 'var(--border-strong)'),
+});
+const toggleThumb = (on: boolean): React.CSSProperties => ({
+  position: 'absolute', top: 2,
+  left: on ? 20 : 2,
+  width: 18, height: 18, borderRadius: '50%',
+  background: on ? '#fff' : 'var(--text-muted)',
+  transition: 'left 200ms, background 200ms',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+});
+
 // ── IMPORTANT: Field defined OUTSIDE component to prevent remount on every keystroke ──
 const iStyle: React.CSSProperties = {
   width: '100%', padding: '8px 11px', fontSize: 14,
   border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-  background: '#fff', color: 'var(--text-primary)',
+  background: 'var(--surface)', color: 'var(--text-primary)',
   outline: 'none', fontFamily: 'Inter, sans-serif',
   transition: 'border-color 120ms, box-shadow 120ms',
   boxSizing: 'border-box',
@@ -48,7 +65,7 @@ function Field({ label, value, onChange, type = 'text', disabled, placeholder, m
         required={!disabled}
         style={{
           ...iStyle,
-          background: disabled ? 'var(--bg)' : '#fff',
+          background: disabled ? 'var(--bg)' : 'var(--surface)',
           color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
           cursor: disabled ? 'not-allowed' : 'text',
         }}
@@ -59,7 +76,7 @@ function Field({ label, value, onChange, type = 'text', disabled, placeholder, m
 
 // ── Component ──
 export const UserProfile: React.FC = () => {
-  const { currentUser, updateProfile, showToast } = useApp();
+  const { currentUser, updateProfile, showToast, theme, setTheme } = useApp();
 
   const [name, setName]   = useState(currentUser?.name ?? '');
   const [desig, setDesig] = useState(currentUser?.designation ?? '');
@@ -212,6 +229,48 @@ export const UserProfile: React.FC = () => {
                   <button type="submit" className="btn btn-primary">Save changes</button>
                 </div>
               </form>
+            </div>
+          </div>
+
+          {/* Preferences — dark mode */}
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <div className="card-title">Preferences</div>
+                <div className="card-subtitle">Customize your visual experience</div>
+              </div>
+            </div>
+            <div className="card-body">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: 8,
+                    background: theme === 'dark' ? '#1a1a2e' : 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: theme === 'dark' ? '#a78bfa' : 'var(--text-muted)' }}>
+                      {theme === 'dark' ? 'dark_mode' : 'light_mode'}
+                    </span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>Dark Mode</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
+                      {theme === 'dark' ? 'Dark theme is active' : 'Switch to dark theme'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  id="dark-mode-toggle"
+                  role="switch"
+                  aria-checked={theme === 'dark'}
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  style={toggleTrack(theme === 'dark')}
+                >
+                  <span style={toggleThumb(theme === 'dark')} />
+                </button>
+              </div>
             </div>
           </div>
 

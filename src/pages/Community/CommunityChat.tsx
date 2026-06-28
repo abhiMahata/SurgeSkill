@@ -142,7 +142,7 @@ export const CommunityChat: React.FC = () => {
   const iStyle: React.CSSProperties = {
     width: '100%', padding: '8px 11px', fontSize: 14,
     border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-    background: '#fff', color: 'var(--text-primary)',
+    background: 'var(--surface)', color: 'var(--text-primary)',
     outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box',
   };
 

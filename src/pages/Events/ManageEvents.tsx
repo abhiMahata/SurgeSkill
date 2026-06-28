@@ -28,7 +28,7 @@ export const ManageEvents: React.FC = () => {
   const iStyle: React.CSSProperties = {
     width: '100%', padding: '7px 10px', fontSize: 13.5,
     border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-    background: '#fff', color: 'var(--text-primary)',
+    background: 'var(--surface)', color: 'var(--text-primary)',
     outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box',
   };
 

@@ -5,7 +5,7 @@ import { COUNTRIES, getStates, getCities, getColleges } from '../../utils/locati
 const sel: React.CSSProperties = {
   width: '100%', padding: '10px 12px', fontSize: 14,
   border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-  background: '#fff', color: 'var(--text-primary)',
+  background: 'var(--surface)', color: 'var(--text-primary)',
   outline: 'none', fontFamily: 'Inter, sans-serif',
   transition: 'border-color 120ms', boxSizing: 'border-box', cursor: 'pointer',
 };
@@ -205,7 +205,7 @@ export const OnboardingWizard: React.FC = () => {
                   onClick={() => setStep(1)}
                   style={{
                     padding: '12px 20px', borderRadius: 10, border: '1px solid var(--border)',
-                    background: '#fff', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600,
+                    background: 'var(--surface)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600,
                     cursor: 'pointer',
                   }}>
                   Back

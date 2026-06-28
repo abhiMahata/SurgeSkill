@@ -56,6 +56,50 @@
 }
 
 /* ─────────────────────────────────────────────
+   DARK MODE TOKEN OVERRIDES
+───────────────────────────────────────────── */
+html.dark {
+  --bg:              #0f0f0f;
+  --surface:         #1a1a1a;
+  --surface-raised:  #222222;
+  --border:          #2e2e2e;
+  --border-strong:   #3d3d3d;
+
+  --text-primary:    #f0f0f0;
+  --text-secondary:  #a0a0a0;
+  --text-muted:      #6a6a6a;
+  --text-inverse:    #0A0A0A;
+
+  --accent:          #e5e5e5;
+  --accent-hover:    #ffffff;
+  --accent-muted:    #252525;
+
+  --blue:            #3b82f6;
+  --blue-light:      #1e2a3f;
+  --blue-border:     #2d4a7a;
+
+  --green:           #22c55e;
+  --green-light:     #0f2a1a;
+  --green-border:    #1a4a2a;
+
+  --amber:           #f59e0b;
+  --amber-light:     #2a200a;
+  --amber-border:    #4a3510;
+
+  --red:             #ef4444;
+  --red-light:       #2a0f0f;
+  --red-border:      #4a1a1a;
+
+  --purple:          #a78bfa;
+  --purple-light:    #1e1530;
+
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.5);
+  --shadow-overlay: 0 16px 48px rgba(0,0,0,0.6);
+}
+
+/* ─────────────────────────────────────────────
    RESET
 ───────────────────────────────────────────── */
 *, *::before, *::after {
