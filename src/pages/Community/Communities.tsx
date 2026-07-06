@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import type { Community } from '../../context/AppContext';
+import { COUNTRIES, getStates, getCities, getColleges } from '../../utils/locationData';
 
 const iStyle: React.CSSProperties = {
   width: '100%', padding: '8px 11px', fontSize: 14,
@@ -14,13 +15,22 @@ export const Communities: React.FC = () => {
   const { currentUser, communities, createCommunity, joinCommunity, leaveCommunity, showToast } = useApp();
   const navigate = useNavigate();
 
-  const [q, setQ]               = useState('');
-  const [showCreate, setShowCreate] = useState(false);
-  const [name, setName]         = useState('');
-  const [desc, setDesc]         = useState('');
-  const [type, setType]         = useState<'college' | 'interest'>('college');
-  const [targetCollege, setTargetCollege] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [q, setQ]                   = useState('');
+  const [showCreate, setShowCreate]  = useState(false);
+  const [name, setName]             = useState('');
+  const [desc, setDesc]             = useState('');
+  const [type, setType]             = useState<'college' | 'interest'>('college');
+  const [creating, setCreating]     = useState(false);
+
+  // College cascade for community creation
+  const [cCountry,  setCCountry]  = useState('India');
+  const [cState,    setCState]    = useState('');
+  const [cCity,     setCCity]     = useState('');
+  const [cCollege,  setCCollege]  = useState('');
+
+  const cStates   = getStates(cCountry);
+  const cCities   = cState   ? getCities(cCountry, cState)           : [];
+  const cColleges = cCity    ? getColleges(cCountry, cState, cCity)  : [];
 
   const isAdmin     = currentUser?.role === 'admin';
   const myCollege   = currentUser?.college ?? '';
@@ -54,8 +64,8 @@ export const Communities: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    if (type === 'college' && !targetCollege.trim()) {
-      showToast('Please specify the college name.');
+    if (type === 'college' && !cCollege.trim()) {
+      showToast('Please select a college from the dropdown.');
       return;
     }
     setCreating(true);
@@ -64,13 +74,14 @@ export const Communities: React.FC = () => {
         name: name.trim(),
         description: desc.trim(),
         type,
-        college: type === 'college' ? targetCollege.trim() : undefined,
+        college: type === 'college' ? cCollege.trim() : undefined,
         createdBy: currentUser?.id || '',
         image: '',
       });
       showToast(`Community "${name}" created!`);
       setShowCreate(false);
-      setName(''); setDesc(''); setType('college'); setTargetCollege('');
+      setName(''); setDesc(''); setType('college');
+      setCCountry('India'); setCState(''); setCCity(''); setCCollege('');
     } catch (err: any) {
       showToast(err.message || 'Failed to create community.');
     }
@@ -276,18 +287,57 @@ export const Communities: React.FC = () => {
                   </div>
                 </div>
 
-                {/* College name — only for college type */}
+                {/* College cascade — only for college type */}
                 {type === 'college' && (
-                  <div className="form-group" style={{ marginBottom: 14 }}>
-                    <label className="form-label">College Name *</label>
-                    <input
-                      style={iStyle}
-                      value={targetCollege}
-                      onChange={e => setTargetCollege(e.target.value)}
-                      required
-                      placeholder="e.g. MIT, IIT Bombay"
-                    />
-                    <span className="form-hint">Only students from this college will see this community.</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 15 }}>school</span>
+                      Select College *
+                    </div>
+
+                    {/* Country */}
+                    <select style={iStyle} value={cCountry} onChange={e => { setCCountry(e.target.value); setCState(''); setCCity(''); setCCollege(''); }}>
+                      {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+
+                    {/* State */}
+                    {cStates.length > 0 && (
+                      <select style={iStyle} value={cState} onChange={e => { setCState(e.target.value); setCCity(''); setCCollege(''); }}>
+                        <option value="">Select state…</option>
+                        {cStates.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
+
+                    {/* City */}
+                    {cState && cCities.length > 0 && (
+                      <select style={iStyle} value={cCity} onChange={e => { setCCity(e.target.value); setCCollege(''); }}>
+                        <option value="">Select city…</option>
+                        {cCities.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    )}
+
+                    {/* College */}
+                    {cCity && cColleges.length > 0 && (
+                      <select style={iStyle} value={cCollege} onChange={e => setCCollege(e.target.value)}>
+                        <option value="">Select college…</option>
+                        {cColleges.map(c => <option key={c} value={c}>{c}</option>)}
+                        <option value="Other">Other (not listed)</option>
+                      </select>
+                    )}
+                    {cCollege === 'Other' && (
+                      <input
+                        style={iStyle}
+                        placeholder="Type college name exactly as students will enter it"
+                        onChange={e => setCCollege(e.target.value === '' ? 'Other' : e.target.value)}
+                      />
+                    )}
+
+                    {cCollege && cCollege !== 'Other' && (
+                      <div style={{ fontSize: 12, color: '#10b981', display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>check_circle</span>
+                        Only students from <strong>&nbsp;{cCollege}&nbsp;</strong> will see this community.
+                      </div>
+                    )}
                   </div>
                 )}
 
