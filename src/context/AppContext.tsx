@@ -136,7 +136,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const c  = localStorage.getItem('ss_courses');      if (c)  setCourses(JSON.parse(c));
       const cm = localStorage.getItem('ss_communities');  if (cm) setCommunities(JSON.parse(cm));
       const a  = localStorage.getItem('ss_activities');   if (a)  setActivities(JSON.parse(a));
-      const email = sessionStorage.getItem('ss_current_user');
+      const email = localStorage.getItem('ss_current_user');
       if (email === ADMIN_EMAIL) {
         setCurrentUser(ADMIN_USER);
       } else if (email) {
@@ -162,7 +162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (userDoc.exists()) setCurrentUser({ id: fbUser.uid, ...userDoc.data() } as User);
       } else {
         // Check if admin session is still active
-        const email = sessionStorage.getItem('ss_current_user');
+        const email = localStorage.getItem('ss_current_user');
         if (email === ADMIN_EMAIL) setCurrentUser(ADMIN_USER);
         else setCurrentUser(null);
       }
@@ -181,7 +181,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const normEmail = email.trim().toLowerCase();
     // Admin intercept — credentials live in .env, not source code
     if (ADMIN_EMAIL && normEmail === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-      sessionStorage.setItem('ss_current_user', ADMIN_EMAIL);
+      localStorage.setItem('ss_current_user', ADMIN_EMAIL);
       setCurrentUser(ADMIN_USER);
       addActivity('Admin logged in');
       return { success: true, message: 'Success' };
@@ -193,7 +193,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!matched) return { success: false, message: 'No account found with that email.' };
       const valid = await verifyPassword(password, matched.password);
       if (!valid) return { success: false, message: 'Incorrect password.' };
-      sessionStorage.setItem('ss_current_user', normEmail);
+      localStorage.setItem('ss_current_user', normEmail);
       const { password: _pw, ...safe } = matched;
       setCurrentUser(safe);
       addActivity(`${matched.name} logged in`);
@@ -227,7 +227,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const hashed = await hashPassword(password);
       const newUser = { ...profile, id: `student-${Date.now()}`, password: hashed };
       saveLocalUsers([...users, newUser]);
-      sessionStorage.setItem('ss_current_user', normEmail);
+      localStorage.setItem('ss_current_user', normEmail);
       const { password: _pw, ...safe } = newUser;
       setCurrentUser(safe as User);
       addActivity('New user registered');
@@ -344,7 +344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = () => {
     if (currentUser) addActivity(`${currentUser.name} logged out`);
-    sessionStorage.removeItem('ss_current_user');
+    localStorage.removeItem('ss_current_user');
     if (fbReady && currentUser?.id !== 'admin-local') signOut(auth);
     setCurrentUser(null);
   };

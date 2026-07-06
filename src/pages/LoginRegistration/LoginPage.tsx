@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import type { UserRole } from '../../types';
@@ -38,9 +38,17 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
 type Tab = 'login' | 'register';
 
 export const LoginPage: React.FC = () => {
-  const { login, register, loginWithGoogle, forgotPassword, showToast } = useApp();
+  const { login, register, loginWithGoogle, forgotPassword, showToast, currentUser, authLoading } = useApp();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('login');
+
+  // If already logged in, skip straight to dashboard — no back button escape
+  useEffect(() => {
+    if (!authLoading && currentUser) {
+      const dest = currentUser.role === 'admin' ? '/dashboard/admin' : '/dashboard/user';
+      navigate(dest, { replace: true });
+    }
+  }, [currentUser, authLoading, navigate]);
 
   // Login state
   const [em, setEm]           = useState('');
@@ -68,11 +76,10 @@ export const LoginPage: React.FC = () => {
     setLoading(false);
     if (res.success) {
       showToast('Welcome back!');
-      if (em.trim().toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL as string || '').toLowerCase()) {
-        navigate('/dashboard/admin');
-      } else {
-        navigate('/dashboard/user');
-      }
+      const dest = em.trim().toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL as string || '').toLowerCase()
+        ? '/dashboard/admin'
+        : '/dashboard/user';
+      navigate(dest, { replace: true }); // replace: true removes login from history
     } else {
       setErr(res.message);
     }
@@ -85,13 +92,13 @@ export const LoginPage: React.FC = () => {
     setRloading(true); setRerr('');
     const res = await register(re, rp);
     setRloading(false);
-    if (res.success) { showToast('Account created! Complete your profile to get started.'); navigate('/dashboard/user'); }
+    if (res.success) { showToast('Account created! Complete your profile to get started.'); navigate('/dashboard/user', { replace: true }); }
     else setRerr(res.message);
   };
 
   const doGoogle = async () => {
     const res = await loginWithGoogle();
-    if (res.success) { showToast('Welcome!'); navigate('/dashboard/user'); }
+    if (res.success) { showToast('Welcome!'); navigate('/dashboard/user', { replace: true }); }
     else setErr(res.message);
   };
 
