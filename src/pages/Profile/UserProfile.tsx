@@ -136,7 +136,7 @@ export const UserProfile: React.FC = () => {
           <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{currentUser.name}</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>{currentUser.designation}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>{currentUser.organization}</div>
-          <span className={`badge ${currentUser.role === 'admin' ? 'badge-black' : currentUser.role === 'mentor' ? 'badge-purple' : 'badge-blue'}`} style={{ textTransform: 'capitalize' }}>
+          <span className={`badge ${(currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COLLEGE_ADMIN' || currentUser.role === 'admin') ? 'badge-black' : currentUser.role === 'mentor' ? 'badge-purple' : 'badge-blue'}`} style={{ textTransform: 'capitalize' }}>
             {currentUser.role}
           </span>
 

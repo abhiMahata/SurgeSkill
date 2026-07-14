@@ -1,6 +1,6 @@
 // ─── Shared Type Definitions ──────────────────────────────────────────
 
-export type UserRole = 'student' | 'mentor' | 'admin';
+export type UserRole = 'student' | 'mentor' | 'admin' | 'STUDENT' | 'COLLEGE_ADMIN' | 'SUPER_ADMIN';
 
 export interface User {
   id: string;

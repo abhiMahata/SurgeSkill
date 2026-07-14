@@ -32,7 +32,7 @@ export const Communities: React.FC = () => {
   const cCities   = cState   ? getCities(cCountry, cState)           : [];
   const cColleges = cCity    ? getColleges(cCountry, cState, cCity)  : [];
 
-  const isAdmin     = currentUser?.role === 'admin';
+  const isAdmin     = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN' || currentUser?.role === 'admin';
   const myCollege   = currentUser?.college ?? '';
 
   /* ── Visibility filter ──────────────────────────────────────────────────

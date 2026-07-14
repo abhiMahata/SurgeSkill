@@ -347,7 +347,7 @@ export const CommunityChat: React.FC = () => {
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
                           <span>{fmtTime(m.timestamp ?? 0)}</span>
-                          {(isMe || currentUser?.role === 'admin') && (
+                          {(isMe || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN' || currentUser?.role === 'admin') && (
                             <button
                               title="Delete"
                               onClick={async () => {
@@ -410,7 +410,7 @@ export const CommunityChat: React.FC = () => {
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Community Events</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Events for {community.name}</div>
             </div>
-            {currentUser?.role === 'admin' && (
+            {(currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN' || currentUser?.role === 'admin') && (
               <button className="btn btn-primary btn-sm" onClick={() => setShowEventForm(true)}>
                 <span className="material-symbols-outlined" style={{ fontSize: 15 }}>add</span>
                 Add Event
@@ -423,7 +423,7 @@ export const CommunityChat: React.FC = () => {
               <span className="material-symbols-outlined" style={{ fontSize: 40, display: 'block', marginBottom: 8 }}>event_busy</span>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>No events yet</div>
               <div style={{ fontSize: 13 }}>
-                {currentUser?.role === 'admin' ? 'Create the first event for this community.' : 'Check back soon!'}
+                {(currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN' || currentUser?.role === 'admin') ? 'Create the first event for this community.' : 'Check back soon!'}
               </div>
             </div>
           ) : (

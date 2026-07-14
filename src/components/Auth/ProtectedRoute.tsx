@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 
 interface Props {
   children: React.ReactNode;
-  /** If true, only users with role === 'admin' may pass. All others redirect to /dashboard/user */
+  /** If true, only users with role 'COLLEGE_ADMIN' or 'SUPER_ADMIN' may pass. All others redirect to /dashboard/user */
   adminOnly?: boolean;
 }
 
@@ -36,7 +36,8 @@ export const ProtectedRoute: React.FC<Props> = ({ children, adminOnly = false })
   }
 
   // Non-admin trying to reach an admin-only route
-  if (adminOnly && currentUser.role !== 'admin') {
+  const isAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COLLEGE_ADMIN' || currentUser.role === 'admin';
+  if (adminOnly && !isAdmin) {
     return <Navigate to="/dashboard/user" replace />;
   }
 

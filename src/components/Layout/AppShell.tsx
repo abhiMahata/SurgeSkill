@@ -17,7 +17,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   if (!currentUser) { navigate('/'); return null; }
 
-  const isAdmin   = currentUser.role === 'admin';
+  const isAdmin   = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COLLEGE_ADMIN' || currentUser.role === 'admin';
   const dashPath  = isAdmin ? '/dashboard/admin' : '/dashboard/user';
 
   const navItems = NAV

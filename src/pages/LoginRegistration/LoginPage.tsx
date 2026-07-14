@@ -45,7 +45,7 @@ export const LoginPage: React.FC = () => {
   // If already logged in, skip straight to dashboard — no back button escape
   useEffect(() => {
     if (!authLoading && currentUser) {
-      const dest = currentUser.role === 'admin' ? '/dashboard/admin' : '/dashboard/user';
+      const dest = (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COLLEGE_ADMIN' || currentUser.role === 'admin') ? '/dashboard/admin' : '/dashboard/user';
       navigate(dest, { replace: true });
     }
   }, [currentUser, authLoading, navigate]);
