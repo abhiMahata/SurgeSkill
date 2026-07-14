@@ -6,7 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Post, Comment, AppUser } from '../../types';
 
 export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }) => {
-  const { currentUser, showToast } = useApp();
+  const { currentUser, showToast, notifyUser, parseMentions } = useApp();
   const [posts, setPosts] = useState<Post[]>([]);
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
@@ -91,6 +91,7 @@ export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
+      await parseMentions(content.trim(), 'post', communityId);
       setContent('');
       showToast('Post created!');
     } catch (err) {
@@ -116,6 +117,10 @@ export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }
         await deleteDoc(likeRef);
       } else {
         await setDoc(likeRef, { userId: currentUser.id, createdAt: Date.now() });
+        const p = posts.find(x => x.id === postId);
+        if (p && p.authorId !== currentUser.id) {
+          await notifyUser(p.authorId, 'POST_LIKE', 'post', postId, `${currentUser.displayName} liked your post.`);
+        }
       }
     } catch (e) {
       showToast('Failed to like post.');
@@ -147,6 +152,11 @@ export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
+      const p = posts.find(x => x.id === postId);
+      if (p && p.authorId !== currentUser.id) {
+        await notifyUser(p.authorId, 'POST_COMMENT', 'post', postId, `${currentUser.displayName} commented on your post.`);
+      }
+      await parseMentions(text.trim(), 'post', postId);
       setCommentInput(prev => ({ ...prev, [postId]: '' }));
     } catch (e) {
       showToast('Failed to add comment.');

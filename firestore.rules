@@ -172,11 +172,28 @@ service cloud.firestore {
       }
     }
 
+    // ── Collection Group Queries ─────────────────────────────────────────────
+    match /{path=**}/posts/{postId} {
+      allow read: if isAuth() && userCollegeId() == resource.data.collegeId;
+    }
+
     // ── Community Read States ────────────────────────────────────────────────
     match /communityReadStates/{readStateId} {
       allow read: if isAuth() && isSelf(resource.data.userId);
       allow create: if isAuth() && isSelf(request.resource.data.userId);
       allow update: if isAuth() && isSelf(resource.data.userId) && isSelf(request.resource.data.userId);
+    }
+
+    // ── Notifications ────────────────────────────────────────────────────────
+    match /notifications/{notificationId} {
+      allow read: if isAuth() && isSelf(resource.data.recipientId);
+      allow create: if isAuth() && 
+        userCollegeId() == request.resource.data.collegeId &&
+        isSelf(request.resource.data.actorId) &&
+        request.resource.data.recipientId != request.resource.data.actorId;
+      allow update: if isAuth() && isSelf(resource.data.recipientId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isAuth() && isSelf(resource.data.recipientId);
     }
 
     // ── Events ───────────────────────────────────────────────────────────────

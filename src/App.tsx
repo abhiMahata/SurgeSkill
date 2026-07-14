@@ -23,7 +23,8 @@ import { CommunityChat } from './pages/Community/CommunityChat';
 // Other
 import { MyCalendar } from './pages/Calendar/MyCalendar';
 import { UserProfile } from './pages/Profile/UserProfile';
-import { Friends } from './pages/Profile/Friends';
+import { Friends } from './pages/Friends/Friends';
+import { NotificationCenter } from './pages/Notifications/NotificationCenter';
 import { Messages } from './pages/Messages/Messages';
 import { EventDetail } from './pages/Events/EventDetail';
 
@@ -73,6 +74,9 @@ const AppContent: React.FC = () => {
         } />
         <Route path="/messages" element={
           <ProtectedRoute><AppShell><Messages /></AppShell></ProtectedRoute>
+        } />
+        <Route path="/notifications" element={
+          <ProtectedRoute><AppShell><NotificationCenter /></AppShell></ProtectedRoute>
         } />
 
         <Route path="*" element={<Navigate to="/" replace />} />

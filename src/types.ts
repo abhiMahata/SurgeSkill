@@ -247,6 +247,30 @@ export interface EventRegistration {
   registeredAt: number;
 }
 
+export interface GlobalSearchResults {
+  communities: Community[];
+  users: AppUser[];
+  events: AppEvent[];
+  posts: Post[];
+}
+
+export type NotificationType = 'FRIEND_REQUEST' | 'FRIEND_ACCEPTED' | 'DIRECT_MESSAGE' | 'POST_LIKE' | 'POST_COMMENT' | 'POST_MENTION' | 'CHAT_MENTION' | 'EVENT_CREATED' | 'EVENT_REGISTRATION';
+
+export interface AppNotification {
+  id: string;
+  recipientId: string;
+  actorId: string;
+  collegeId: string;
+  type: NotificationType;
+  entityType: 'user' | 'community' | 'post' | 'event' | 'message';
+  entityId: string;
+  message: string;
+  read: boolean;
+  createdAt: number;
+}
+
+export const MAX_NOTIFICATION_BATCH_SIZE = 500;
+
 export interface PostLike {
   id: string; // userId
   userId: string;

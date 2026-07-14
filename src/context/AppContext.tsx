@@ -5,14 +5,16 @@ import {
   updateProfile as fbUpdateProfile, sendPasswordResetEmail,
 } from 'firebase/auth';
 import {
-  doc, getDoc, setDoc, updateDoc, collection, onSnapshot,
+  doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs, collectionGroup,
   addDoc, deleteDoc, query, orderBy, limit, increment, serverTimestamp, getCountFromServer, where
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import type {
-  User, UserRole, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser, AppCommunityMember,
-  FriendRequest, Friendship, Block, Conversation, ConversationMessage, StorageMetadata, AppEvent, EventRegistration
+  User, AppUser, UserRole, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser, AppCommunityMember,
+  FriendRequest, Friendship, Block, Conversation, ConversationMessage, StorageMetadata, AppEvent, EventRegistration, GlobalSearchResults, Post,
+  AppNotification, NotificationType
 } from '../types';
+import { MAX_NOTIFICATION_BATCH_SIZE } from '../types';
 import { hashPassword, verifyPassword } from '../utils/auth';
 
 export type { User, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser, AppEvent, EventRegistration };
@@ -80,6 +82,16 @@ interface AppContextType {
   sendDirectMessage: (targetId: string, text: string, attachments?: StorageMetadata[]) => Promise<void>;
   markConversationRead: (targetId: string) => Promise<void>;
 
+  // Canonical Search
+  globalSearch: (q: string) => Promise<GlobalSearchResults>;
+
+  // Canonical Notifications
+  notifications: AppNotification[];
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  notifyUser: (recipientId: string, type: NotificationType, entityType: AppNotification['entityType'], entityId: string, message: string) => Promise<void>;
+  parseMentions: (text: string, entityType: AppNotification['entityType'], entityId: string) => Promise<void>;
+
   theme: 'light' | 'dark';
   setTheme: (t: 'light' | 'dark') => void;
   toast: { message: string; visible: boolean };
@@ -119,6 +131,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [friendships, setFriendships]         = useState<Friendship[]>([]);
   const [blocks, setBlocks]                   = useState<Block[]>([]);
   const [conversations, setConversations]     = useState<Conversation[]>([]);
+  const [notifications, setNotifications]     = useState<AppNotification[]>([]);
   
   const typingTimerRef                        = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -275,6 +288,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
       setConversations(all.filter(c => c.participantIds.includes(currentUser.id)).sort((a, b) => b.lastMessageAt - a.lastMessageAt));
     }));
+
+    unsubs.push(onSnapshot(
+      query(collection(db, 'notifications'), where('recipientId', '==', currentUser.id), orderBy('createdAt', 'desc'), limit(50)),
+      s => setNotifications(s.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification)))
+    ));
 
     return () => unsubs.forEach(u => u());
   }, [fbReady, currentUser?.id]);
@@ -513,8 +531,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
-    if (fbReady) await setDoc(doc(db, 'events', ev.id), ev);
-    else { const u = [...events, ev]; setEvents(u); persistLocal('ss_events', u); }
+    if (fbReady) {
+      await setDoc(doc(db, 'events', ev.id), ev);
+      if (ev.scope === 'COMMUNITY' && ev.communityId) {
+        try {
+          const { getDocs, query, collection, limit, writeBatch } = await import('firebase/firestore');
+          const membersSnap = await getDocs(query(collection(db, 'communities', ev.communityId, 'members'), limit(MAX_NOTIFICATION_BATCH_SIZE)));
+          const batch = writeBatch(db);
+          membersSnap.forEach(d => {
+            const memberId = d.id;
+            if (memberId !== currentUser.id) {
+              const notifRef = doc(collection(db, 'notifications'));
+              batch.set(notifRef, {
+                recipientId: memberId,
+                actorId: currentUser.id,
+                collegeId: currentUser.collegeId,
+                type: 'EVENT_CREATED',
+                entityType: 'event',
+                entityId: ev.id,
+                message: `${currentUser.displayName} created a new event: ${ev.title}`,
+                read: false,
+                createdAt: Date.now()
+              });
+            }
+          });
+          await batch.commit();
+        } catch (e) {
+          console.error('Fan-out event notification failed', e);
+        }
+      }
+    } else { const u = [...events, ev]; setEvents(u); persistLocal('ss_events', u); }
     addActivity(`Created event "${data.title}"`);
   };
   const updateEvent = (id: string, data: Partial<AppEvent>) => {
@@ -542,6 +588,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           collegeId: currentUser.collegeId || 'surgeskill',
           registeredAt: Date.now()
         });
+        const ev = events.find(e => e.id === id);
+        if (ev && ev.createdBy && ev.createdBy !== currentUser.id) {
+          await notifyUser(ev.createdBy, 'EVENT_REGISTRATION', 'event', id, `${currentUser.displayName} registered for your event: ${ev.title}`);
+        }
       }
       await updateDoc(doc(db, 'events', id), { registrationCount: increment(isReg ? -1 : 1) });
     }
@@ -771,6 +821,124 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const globalSearch = async (q: string): Promise<GlobalSearchResults> => {
+    if (!q || !q.trim() || !currentUser?.collegeId) {
+      return { communities: [], users: [], events: [], posts: [] };
+    }
+    const term = q.trim();
+    const endTerm = term + '\uf8ff';
+    const cid = currentUser.collegeId;
+
+    try {
+      const [comSnap, userSnap, fcSnap, evSnap, postSnap] = await Promise.all([
+        getDocs(query(collection(db, 'communities'), where('collegeId', '==', cid), where('name', '>=', term), where('name', '<', endTerm), limit(20))),
+        getDocs(query(collection(db, 'users'), where('collegeId', '==', cid), where('displayName', '>=', term), where('displayName', '<', endTerm), limit(20))),
+        getDoc(doc(db, 'friendCodes', term.toUpperCase())),
+        getDocs(query(collection(db, 'events'), where('collegeId', '==', cid), where('title', '>=', term), where('title', '<', endTerm), limit(20))),
+        getDocs(query(collectionGroup(db, 'posts'), where('collegeId', '==', cid), where('content', '>=', term), where('content', '<', endTerm), limit(20)))
+      ]);
+
+      const communities = comSnap.docs.map(d => ({ id: d.id, ...d.data() } as Community));
+      const events = evSnap.docs.map(d => ({ id: d.id, ...d.data() } as AppEvent));
+      const posts = postSnap.docs.map(d => ({ id: d.id, ...d.data() } as Post));
+      
+      const usersMap = new Map<string, AppUser>();
+      userSnap.docs.forEach(d => usersMap.set(d.id, { id: d.id, ...d.data() } as AppUser));
+      
+      if (fcSnap.exists()) {
+        const uId = fcSnap.data().userId;
+        const uSnap = await getDoc(doc(db, 'users', uId));
+        if (uSnap.exists()) {
+          const u = { id: uSnap.id, ...uSnap.data() } as AppUser;
+          if (u.collegeId === cid) {
+            usersMap.set(uSnap.id, u);
+          }
+        }
+      }
+
+      return { communities, users: Array.from(usersMap.values()), events, posts };
+    } catch (err) {
+      console.error('globalSearch error', err);
+      return { communities: [], users: [], events: [], posts: [] };
+    }
+  };
+
+  const notifyUser = async (recipientId: string, type: NotificationType, entityType: AppNotification['entityType'], entityId: string, message: string) => {
+    if (!currentUser || !fbReady || recipientId === currentUser.id) return;
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        recipientId,
+        actorId: currentUser.id,
+        collegeId: currentUser.collegeId,
+        type,
+        entityType,
+        entityId,
+        message,
+        read: false,
+        createdAt: Date.now()
+      });
+    } catch (e) {
+      console.error('Failed to notify', e);
+    }
+  };
+
+  const markNotificationRead = async (id: string) => {
+    if (!fbReady) return;
+    try {
+      await updateDoc(doc(db, 'notifications', id), { read: true });
+    } catch {}
+  };
+
+  const markAllNotificationsRead = async () => {
+    if (!fbReady || !currentUser) return;
+    try {
+      const { writeBatch } = await import('firebase/firestore');
+      const batch = writeBatch(db);
+      notifications.filter(n => !n.read).forEach(n => {
+        batch.update(doc(db, 'notifications', n.id), { read: true });
+      });
+      await batch.commit();
+    } catch (e) {
+      console.error('Failed to mark all read', e);
+    }
+  };
+
+  const parseMentions = async (text: string, entityType: AppNotification['entityType'], entityId: string) => {
+    if (!currentUser || !fbReady || !text) return;
+    const mentions = text.match(/@([\w\s]+?)(?=\s|$|[.,!?])/g);
+    // Note: the regex matches "@Name" or "@FriendCode". A simpler regex is: /@(\S+)/g to just grab non-whitespace
+    const simpleMentions = text.match(/@([a-zA-Z0-9_]+)/g);
+    if (!simpleMentions) return;
+    
+    const uniqueMentions = Array.from(new Set(simpleMentions.map(m => m.substring(1))));
+    
+    for (const m of uniqueMentions) {
+      try {
+        let targetId = null;
+        // 1. Friend code exact match
+        const fcSnap = await getDoc(doc(db, 'friendCodes', m.toUpperCase()));
+        if (fcSnap.exists()) {
+          targetId = fcSnap.data().userId;
+        } else {
+          // 2. Display name match
+          const { getDocs, query, collection, where, limit } = await import('firebase/firestore');
+          const nameSnap = await getDocs(query(collection(db, 'users'), where('collegeId', '==', currentUser.collegeId), where('displayName', '==', m), limit(2)));
+          if (nameSnap.size === 1) {
+            targetId = nameSnap.docs[0].id;
+          }
+        }
+        if (targetId && targetId !== currentUser.id) {
+          const typeMap: Record<string, NotificationType> = {
+            'post': 'POST_MENTION',
+            'message': 'CHAT_MENTION'
+          };
+          const nType = typeMap[entityType] || 'POST_MENTION';
+          await notifyUser(targetId, nType, entityType, entityId, `${currentUser.displayName} mentioned you.`);
+        }
+      } catch (e) {}
+    }
+  };
+
   const sendFriendRequest = async (targetId: string) => {
     if (!currentUser || !fbReady) return;
     const pairId = getPairId(currentUser.id, targetId);
@@ -783,6 +951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: Date.now(),
         respondedAt: null
       });
+      await notifyUser(targetId, 'FRIEND_REQUEST', 'user', currentUser.id, `${currentUser.displayName} sent you a friend request.`);
       showToast('Friend request sent!');
     } catch (e) {
       showToast('Could not send request.');
@@ -803,6 +972,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'ACTIVE',
         createdAt: Date.now()
       });
+      await notifyUser(targetId, 'FRIEND_ACCEPTED', 'user', currentUser.id, `${currentUser.displayName} accepted your friend request.`);
       showToast('Friend request accepted!');
     } catch (e) {
       showToast('Could not accept request.');
@@ -895,6 +1065,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       const { collection, addDoc } = await import('firebase/firestore');
       await addDoc(collection(db, 'conversations', pairId, 'messages'), msg);
+      await notifyUser(targetId, 'DIRECT_MESSAGE', 'message', pairId, `${currentUser.displayName} sent you a message.`);
 
     } catch (e) {
       console.error(e);
@@ -928,10 +1099,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       friendRequests, friendships, blocks, searchFriendCode, sendFriendRequest,
       acceptFriendRequest, rejectFriendRequest, removeFriend, blockUser, unblockUser,
-
-      conversations, sendDirectMessage, markConversationRead,
-
-      activities, addActivity, theme, setTheme, toast, showToast,
+      conversations, sendDirectMessage, markConversationRead, globalSearch,
+      notifications, markNotificationRead, markAllNotificationsRead, notifyUser, parseMentions,
+      theme, setTheme: setThemeState, toast, showToast,
       typingUsers, setTyping, subscribeTyping,
     }}>
       {children}

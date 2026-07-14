@@ -38,7 +38,7 @@ export const CommunityChat: React.FC = () => {
   const navigate = useNavigate();
   const {
     currentUser, communities, joinCommunity, leaveCommunity,
-    events, createEvent, showToast,
+    events, createEvent, showToast, parseMentions,
     subscribeTyping, setTyping, typingUsers, myMemberships, memberCounts
   } = useApp();
 
@@ -179,7 +179,8 @@ export const CommunityChat: React.FC = () => {
     };
 
     try {
-      await addDoc(collection(db, 'communities', id, 'messages'), msg);
+      const docRef = await addDoc(collection(db, 'communities', id, 'messages'), msg);
+      await parseMentions(safeText, 'message', docRef.id);
       setChatError('');
     } catch (err: any) {
       console.error('Send failed:', err.code, err.message);

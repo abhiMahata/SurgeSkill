@@ -13,9 +13,9 @@ const NAV: { label: string; icon: string; path: string; adminOnly?: boolean }[] 
 ];
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, logout, toast } = useApp();
-  const location  = useLocation();
-  const navigate  = useNavigate();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { currentUser, logout, theme, setTheme, notifications, toast } = useApp();
 
   if (!currentUser) { navigate('/'); return null; }
 
@@ -133,9 +133,17 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             </div>
           </div>
           <div className="topbar-right">
-            <button className="btn-icon" style={{ position: 'relative' }}>
+            <button className="btn-icon" style={{ position: 'relative' }} onClick={() => navigate('/notifications')}>
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>notifications</span>
-              <span className="notif-dot" />
+              {notifications.some(n => !n.read) && (
+                <span style={{
+                  position: 'absolute', top: 4, right: 6,
+                  background: 'var(--primary)', color: '#fff', fontSize: 10, fontWeight: 700,
+                  width: 14, height: 14, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {notifications.filter(n => !n.read).length > 9 ? '9+' : notifications.filter(n => !n.read).length}
+                </span>
+              )}
             </button>
             <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
             <div
