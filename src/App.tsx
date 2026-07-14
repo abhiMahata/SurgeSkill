@@ -26,8 +26,9 @@ import { UserProfile } from './pages/Profile/UserProfile';
 
 /** Renders the full route tree + the onboarding overlay when needed */
 const AppContent: React.FC = () => {
-  const { currentUser, authLoading } = useApp();
-  const needsOnboarding = !authLoading && currentUser && !currentUser.onboardingComplete;
+  const { authLoading, hydrationState } = useApp();
+  const needsOnboarding = !authLoading && hydrationState === 'NEEDS_ONBOARDING';
+  const needsMigration = !authLoading && hydrationState === 'PENDING_MIGRATION';
 
   return (
     <>
@@ -66,7 +67,7 @@ const AppContent: React.FC = () => {
       </Routes>
 
       {/* Onboarding overlay — blocks the UI until the user completes setup */}
-      {needsOnboarding && <OnboardingWizard />}
+      {(needsOnboarding || needsMigration) && <OnboardingWizard isMigration={needsMigration} />}
     </>
   );
 };

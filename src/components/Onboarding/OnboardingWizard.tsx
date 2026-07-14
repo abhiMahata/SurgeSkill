@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { COUNTRIES, getStates, getCities, getColleges } from '../../utils/locationData';
+import { auth, db } from '../../firebase';
+import { collection, query, where, getDocs, setDoc, doc } from 'firebase/firestore';
 
 const sel: React.CSSProperties = {
   width: '100%', padding: '10px 12px', fontSize: 14,
@@ -13,34 +14,105 @@ const inp: React.CSSProperties = { ...sel, cursor: 'text' };
 
 const AGES = ['Under 16', '16–17', '18–20', '21–23', '24–27', '28–35', '36–45', '46+'];
 
-export const OnboardingWizard: React.FC = () => {
-  const { currentUser, completeOnboarding, showToast } = useApp();
+export const OnboardingWizard: React.FC<{ isMigration?: boolean }> = ({ isMigration }) => {
+  const { currentUser, completeOnboarding, showToast, logout } = useApp();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
   // Step 1
   const [name, setName] = useState(currentUser?.name || '');
-  const [age, setAge]   = useState('');
+  const [age, setAge]   = useState(currentUser?.age || '');
 
   // Step 2
-  const [country, setCountry] = useState('India');
-  const [state, setState]     = useState('');
-  const [city, setCity]       = useState('');
-  const [college, setCollege] = useState('');
+  const [collegeIdOptions, setCollegeIdOptions] = useState<{id: string, domain: string}[]>([]);
+  const [selectedCollegeId, setSelectedCollegeId] = useState(currentUser?.collegeId || '');
+  const [resolvingDomain, setResolvingDomain] = useState(true);
+  const [domainError, setDomainError] = useState('');
 
-  const states   = getStates(country);
-  const cities   = state  ? getCities(country, state)   : [];
-  const colleges = city   ? getColleges(country, state, city) : [];
+  useEffect(() => {
+    const resolveDomain = async () => {
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        setDomainError('No authenticated email found.');
+        setResolvingDomain(false);
+        return;
+      }
+      // Support legacy users who might already have collegeId
+      if (isMigration && currentUser?.collegeId) {
+        setCollegeIdOptions([{ id: currentUser.collegeId, domain: user.email.split('@')[1] }]);
+        setSelectedCollegeId(currentUser.collegeId);
+        setResolvingDomain(false);
+        return;
+      }
+
+      const domain = user.email.split('@')[1];
+      if (!domain) {
+        setDomainError('Invalid email format.');
+        setResolvingDomain(false);
+        return;
+      }
+      try {
+        const q = query(collection(db, 'collegeDomains'), where('domain', '==', domain));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          setDomainError(`Email domain @${domain} is not currently supported by SurgeSkill.`);
+        } else {
+          const options = snap.docs.map(d => ({ id: d.id, domain: d.data().domain }));
+          setCollegeIdOptions(options);
+          if (options.length === 1) setSelectedCollegeId(options[0].id);
+        }
+      } catch (err) {
+        setDomainError('Error verifying college domain.');
+      }
+      setResolvingDomain(false);
+    };
+    resolveDomain();
+  }, [isMigration, currentUser]);
+
+  const generateFriendCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
+  const claimFriendCode = async (userId: string): Promise<string> => {
+    if (isMigration && currentUser?.friendCode) return currentUser.friendCode;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = generateFriendCode();
+      try {
+        await setDoc(doc(db, 'friendCodes', code), { userId });
+        return code;
+      } catch (e) {
+        // Collision, retry
+      }
+    }
+    throw new Error('Could not generate unique friend code after multiple attempts.');
+  };
 
   const canStep1 = name.trim().length >= 2 && age;
-  const canStep2 = country && state && city && college;
+  const canStep2 = selectedCollegeId && !resolvingDomain && !domainError;
 
   const handleFinish = async () => {
     if (!canStep2) return;
     setLoading(true);
-    const res = await completeOnboarding({ name: name.trim(), role: 'student', age, country, state, city, college });
+    try {
+      const friendCode = await claimFriendCode(auth.currentUser!.uid);
+      const res = await completeOnboarding({ 
+        name: name.trim(), 
+        age, 
+        collegeId: selectedCollegeId, 
+        friendCode, 
+        isMigration: !!isMigration 
+      });
+      if (res.success) showToast(`Welcome to SurgeSkill, ${name.split(' ')[0]}! 🎉`);
+      else throw new Error(res.message);
+    } catch (err: any) {
+      showToast(err.message || 'Setup failed.');
+    }
     setLoading(false);
-    if (res.success) showToast(`Welcome to SurgeSkill, ${name.split(' ')[0]}! 🎉`);
   };
 
   return (
@@ -85,10 +157,10 @@ export const OnboardingWizard: React.FC = () => {
           {step === 1 && (
             <>
               <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 4 }}>
-                Welcome! Let's set up your profile 👋
+                {isMigration ? 'Update your profile 👋' : 'Welcome! Let\'s set up your profile 👋'}
               </h2>
               <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 28, lineHeight: 1.6 }}>
-                Tell us a bit about yourself to personalize your experience.
+                {isMigration ? 'We need a little more information to finalize your SurgeSkill account.' : 'Tell us a bit about yourself to personalize your experience.'}
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -99,8 +171,6 @@ export const OnboardingWizard: React.FC = () => {
                   </label>
                   <input style={inp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Arjun Sharma" />
                 </div>
-
-
 
                 {/* Age */}
                 <div>
@@ -114,21 +184,32 @@ export const OnboardingWizard: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                style={{
-                  width: '100%', marginTop: 28, padding: '12px',
-                  background: canStep1 ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'var(--border)',
-                  color: canStep1 ? '#fff' : 'var(--text-muted)',
-                  border: 'none', borderRadius: 10, fontSize: 14.5, fontWeight: 700,
-                  cursor: canStep1 ? 'pointer' : 'not-allowed', transition: 'all 150ms',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-                disabled={!canStep1}
-                onClick={() => canStep1 && setStep(2)}
-              >
-                Continue
-                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
-              </button>
+              <div style={{ display: 'flex', gap: 10, marginTop: 28 }}>
+                <button
+                  onClick={logout}
+                  style={{
+                    padding: '12px 20px', borderRadius: 10, border: '1px solid var(--border)',
+                    background: 'var(--surface)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer',
+                  }}>
+                  Sign Out
+                </button>
+                <button
+                  style={{
+                    flex: 1, padding: '12px',
+                    background: canStep1 ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'var(--border)',
+                    color: canStep1 ? '#fff' : 'var(--text-muted)',
+                    border: 'none', borderRadius: 10, fontSize: 14.5, fontWeight: 700,
+                    cursor: canStep1 ? 'pointer' : 'not-allowed', transition: 'all 150ms',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}
+                  disabled={!canStep1}
+                  onClick={() => canStep1 && setStep(2)}
+                >
+                  Continue
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
+                </button>
+              </div>
             </>
           )}
 
@@ -136,66 +217,46 @@ export const OnboardingWizard: React.FC = () => {
           {step === 2 && (
             <>
               <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 4 }}>
-                Where are you from? 📍
+                Verify your Campus 🎓
               </h2>
               <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 6, lineHeight: 1.6 }}>
-                This connects you with communities at your institution.
+                SurgeSkill connects you with communities at your institution based on your email domain.
               </p>
-              <div style={{
-                fontSize: 12, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a',
-                borderRadius: 8, padding: '8px 12px', marginBottom: 24,
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 15 }}>lock</span>
-                Location cannot be changed after this step.
-              </div>
+              
+              {!currentUser?.collegeId && (
+                <div style={{
+                  fontSize: 12, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a',
+                  borderRadius: 8, padding: '8px 12px', marginBottom: 24,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>lock</span>
+                  Campus assignment is permanent and cannot be changed later.
+                </div>
+              )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {/* Country */}
-                <div>
-                  <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>Country *</label>
-                  <select style={sel} value={country} onChange={e => { setCountry(e.target.value); setState(''); setCity(''); setCollege(''); }}>
-                    {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-
-                {/* State */}
-                {states.length > 0 && (
-                  <div>
-                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>State / Province *</label>
-                    <select style={sel} value={state} onChange={e => { setState(e.target.value); setCity(''); setCollege(''); }}>
-                      <option value="">Select state…</option>
-                      {states.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                {resolvingDomain ? (
+                  <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
+                    Resolving your email domain...
                   </div>
-                )}
-
-                {/* City */}
-                {state && cities.length > 0 && (
-                  <div>
-                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>City *</label>
-                    <select style={sel} value={city} onChange={e => { setCity(e.target.value); setCollege(''); }}>
-                      <option value="">Select city…</option>
-                      {cities.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                ) : domainError ? (
+                  <div style={{ padding: 16, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, color: '#b91c1c', fontSize: 13.5 }}>
+                    {domainError}
+                    <div style={{ marginTop: 12 }}>
+                      <button onClick={logout} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#b91c1c', color: '#fff', fontSize: 12, cursor: 'pointer' }}>
+                        Use a different account
+                      </button>
+                    </div>
                   </div>
-                )}
-
-                {/* College */}
-                {city && colleges.length > 0 && (
+                ) : (
                   <div>
                     <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
-                      College / University *
+                      Select Campus *
                     </label>
-                    <select style={sel} value={college} onChange={e => setCollege(e.target.value)}>
-                      <option value="">Select institution…</option>
-                      {colleges.map(c => <option key={c} value={c}>{c}</option>)}
-                      <option value="Other">Other (not listed)</option>
+                    <select style={sel} value={selectedCollegeId} onChange={e => setSelectedCollegeId(e.target.value)}>
+                      <option value="">Select your campus…</option>
+                      {collegeIdOptions.map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
                     </select>
-                    {college === 'Other' && (
-                      <input style={{ ...inp, marginTop: 8 }} placeholder="Enter your institution name"
-                        onChange={e => setCollege(e.target.value === '' ? 'Other' : e.target.value)} />
-                    )}
                   </div>
                 )}
               </div>

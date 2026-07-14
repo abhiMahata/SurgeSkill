@@ -18,32 +18,20 @@ export type { User, EventItem, Hackathon, Course, ActivityLog, Community, ChatMe
 
 export interface PendingGoogleUser { uid: string; name: string; email: string; photoURL: string; }
 
-// ── Admin credentials loaded from .env (never commit .env to git) ────────────
-const ADMIN_EMAIL    = (import.meta.env.VITE_ADMIN_EMAIL    as string | undefined) ?? '';
-const ADMIN_PASSWORD = (import.meta.env.VITE_ADMIN_PASSWORD as string | undefined) ?? '';
-const ADMIN_USER: User = {
-  id: 'admin-local',
-  name: 'Admin',
-  email: ADMIN_EMAIL,
-  role: 'admin',
-  designation: 'Administrator',
-  organization: 'SurgeSkill',
-  registeredEvents: [],
-  enrolledCourses: [],
-  registeredHackathons: [],
-  joinedCommunities: [],
-  onboardingComplete: true, // admin skips onboarding
-};
+// Removed legacy hardcoded admin credentials
+
+export type HydrationState = 'LOADING' | 'ACTIVE' | 'NEEDS_ONBOARDING' | 'PENDING_MIGRATION';
 
 interface AppContextType {
   currentUser: User | null;
   authLoading: boolean;
+  hydrationState: HydrationState;
   pendingGoogleUser: PendingGoogleUser | null;
   login: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
   register: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; message: string; newUser?: boolean }>;
   completeGoogleSignup: (role: UserRole) => Promise<{ success: boolean; message: string }>;
-  completeOnboarding: (data: { name: string; role: UserRole; age: string; country: string; state: string; city: string; college: string }) => Promise<{ success: boolean; message: string }>;
+  completeOnboarding: (data: { name: string; age: string; collegeId: string; friendCode: string; isMigration: boolean }) => Promise<{ success: boolean; message: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   updateProfile: (data: Partial<User> & { password?: string }) => Promise<boolean>;
@@ -88,6 +76,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [currentUser, setCurrentUser]         = useState<User | null>(null);
   const [authLoading, setAuthLoading]         = useState(true);
+  const [hydrationState, setHydrationState]   = useState<HydrationState>('LOADING');
   const [pendingGoogleUser, setPendingGoogleUser] = useState<PendingGoogleUser | null>(null);
   const [events, setEvents]                   = useState<EventItem[]>([]);
   const [hackathons, setHackathons]           = useState<Hackathon[]>([]);
@@ -138,13 +127,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cm = localStorage.getItem('ss_communities');  if (cm) setCommunities(JSON.parse(cm));
       const a  = localStorage.getItem('ss_activities');   if (a)  setActivities(JSON.parse(a));
       const email = localStorage.getItem('ss_current_user');
-      if (email === ADMIN_EMAIL) {
-        setCurrentUser(ADMIN_USER);
-      } else if (email) {
+      if (email) {
         const users = JSON.parse(localStorage.getItem('ss_users') || '[]');
         const found = users.find((u: any) => u.email === email);
         if (found) setCurrentUser(found);
       }
+      setHydrationState('ACTIVE');
       setAuthLoading(false);
       return;
     }
@@ -159,18 +147,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
+        // Enforce email verification (for password auth, skip if google because google auto-verifies)
+        // Wait, onAuthStateChanged fires immediately. If email is not verified, we can log them out or block hydration.
+        // The prompt asks to enforce email verification. We'll enforce it during login instead.
         const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
-        if (userDoc.exists()) setCurrentUser({ id: fbUser.uid, ...userDoc.data() } as User);
-      } else {
-        // Check if admin session is still active
-        const email = localStorage.getItem('ss_current_user');
-        if (email === ADMIN_EMAIL) {
-          // Restore admin and sign in anonymously so Firestore rules pass
-          if (!auth.currentUser) { try { await signInAnonymously(auth); } catch {} }
-          setCurrentUser(ADMIN_USER);
-        } else {
+        if (!userDoc.exists()) {
+          setHydrationState('NEEDS_ONBOARDING');
           setCurrentUser(null);
+        } else {
+          const data = userDoc.data() as User;
+          setCurrentUser({ id: fbUser.uid, ...data });
+          
+          if (!data.collegeId || !data.friendCode || data.status === 'PENDING_ONBOARDING') {
+            setHydrationState('PENDING_MIGRATION');
+          } else {
+            setHydrationState('ACTIVE');
+          }
         }
+      } else {
+        setCurrentUser(null);
+        setHydrationState('ACTIVE');
       }
       setAuthLoading(false);
     });
@@ -185,17 +181,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ── Login ────────────────────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
     const normEmail = email.trim().toLowerCase();
-    // Admin intercept — credentials live in .env, not source code
-    if (ADMIN_EMAIL && normEmail === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-      localStorage.setItem('ss_current_user', ADMIN_EMAIL);
-      // Give admin a real Firebase Auth token (anonymous) so Firestore writes succeed
-      if (fbReady && !auth.currentUser) {
-        try { await signInAnonymously(auth); } catch {}
-      }
-      setCurrentUser(ADMIN_USER);
-      addActivity('Admin logged in');
-      return { success: true, message: 'Success' };
-    }
 
     if (!fbReady) {
       const users = getLocalUsers();
@@ -211,10 +196,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     try {
       const cred = await signInWithEmailAndPassword(auth, normEmail, password);
+      if (!cred.user.emailVerified) {
+        await signOut(auth);
+        return { success: false, message: 'Please verify your email address before logging in.' };
+      }
       const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
-      if (!userDoc.exists()) return { success: false, message: 'User profile not found.' };
+      if (!userDoc.exists()) {
+        // Registration started but not onboarded
+        setHydrationState('NEEDS_ONBOARDING');
+        return { success: true, message: 'Success' };
+      }
       const data = userDoc.data() as User;
       setCurrentUser({ id: cred.user.uid, ...data });
+      if (!data.collegeId || !data.friendCode || data.status === 'PENDING_ONBOARDING') {
+        setHydrationState('PENDING_MIGRATION');
+      } else {
+        setHydrationState('ACTIVE');
+      }
       addActivity(`${data.name} logged in`);
       return { success: true, message: 'Success' };
     } catch (err: any) {
@@ -245,10 +243,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     try {
       const cred = await createUserWithEmailAndPassword(auth, normEmail, password);
-      await setDoc(doc(db, 'users', cred.user.uid), profile);
-      setCurrentUser({ id: cred.user.uid, ...profile });
-      addActivity('New user registered');
-      return { success: true, message: 'Success' };
+      // We no longer write to Firestore here! Onboarding will do it, satisfying the rule restrictions.
+      // We must send email verification and log them out, since email verification is enforced.
+      // Firebase auth auto-logs in on create, so we sign out immediately.
+      import('firebase/auth').then(({ sendEmailVerification }) => {
+        sendEmailVerification(cred.user).catch(() => {});
+      });
+      await signOut(auth);
+      return { success: true, message: 'Account created! Please check your email to verify your address.' };
     } catch (err: any) {
       return { success: false, message: err.message || 'Registration failed.' };
     }
@@ -266,19 +268,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addActivity(`${result.user.displayName} logged in via Google`);
         return { success: true, message: 'Success' };
       }
-      // New Google user — create profile with onboardingComplete: false
-      // The OnboardingWizard will show automatically and collect the rest
-      const profile: Omit<User, 'id'> = {
-        name:     result.user.displayName || 'User',
-        email:    result.user.email       || '',
-        role:     'student', designation: 'Student', organization: '',
-        registeredEvents: [], enrolledCourses: [], registeredHackathons: [], joinedCommunities: [],
-        photoURL: result.user.photoURL || '',
-        onboardingComplete: false,
-      };
-      await setDoc(doc(db, 'users', uid), profile);
-      setCurrentUser({ id: uid, ...profile });
-      addActivity(`${profile.name} registered via Google`);
+      // New Google user — they don't need email verification because Google provides it.
+      // We don't write to Firestore here. Onboarding will do it.
+      setHydrationState('NEEDS_ONBOARDING');
+      setCurrentUser(null);
       return { success: true, message: 'Success' };
     } catch (err: any) {
       return { success: false, message: err.message || 'Google sign-in failed.' };
@@ -309,32 +302,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ── Complete Onboarding ─────────────────────────────────────────────
   const completeOnboarding = async (data: {
-    name: string; role: UserRole; age: string;
-    country: string; state: string; city: string; college: string;
+    name: string; age: string; collegeId: string; friendCode: string; isMigration: boolean;
   }) => {
-    if (!currentUser) return { success: false, message: 'Not logged in.' };
-    const update = {
-      name:               data.name,
-      role:               data.role,
-      age:                data.age,
-      country:            data.country,
-      state:              data.state,
-      city:               data.city,
-      college:            data.college,
-      organization:       data.college,
-      designation:        data.role === 'mentor' ? 'Mentor' : 'Student',
-      onboardingComplete: true,
-    };
+    const user = auth.currentUser;
+    if (fbReady && !user) return { success: false, message: 'Not logged in.' };
+    
     try {
-      if (fbReady && currentUser.id !== 'admin-local') {
-        await updateDoc(doc(db, 'users', currentUser.id), update);
-        if (auth.currentUser) await fbUpdateProfile(auth.currentUser, { displayName: data.name });
+      if (fbReady) {
+        if (data.isMigration) {
+          if (!currentUser) return { success: false, message: 'Current user state missing.' };
+          const updateData: any = {};
+          if (data.name) updateData.name = data.name;
+          if (data.age) updateData.age = data.age;
+          if (!currentUser.collegeId) updateData.collegeId = data.collegeId;
+          if (!currentUser.friendCode) updateData.friendCode = data.friendCode;
+          updateData.status = 'ACTIVE';
+          updateData.onboardingComplete = true;
+          
+          await updateDoc(doc(db, 'users', currentUser.id), updateData);
+          if (data.name) await fbUpdateProfile(user!, { displayName: data.name });
+          
+          setCurrentUser(prev => prev ? { ...prev, ...updateData } : null);
+          setHydrationState('ACTIVE');
+          addActivity(`${data.name || currentUser.name} migrated profile`);
+        } else {
+          // New user creation
+          const profile: User = {
+            id: user!.uid,
+            name: data.name,
+            email: user!.email || '',
+            role: 'STUDENT',
+            status: 'ACTIVE',
+            collegeId: data.collegeId,
+            friendCode: data.friendCode,
+            age: data.age,
+            designation: 'Student',
+            organization: '',
+            registeredEvents: [],
+            enrolledCourses: [],
+            registeredHackathons: [],
+            joinedCommunities: [],
+            onboardingComplete: true,
+          };
+          await setDoc(doc(db, 'users', user!.uid), profile);
+          await fbUpdateProfile(user!, { displayName: data.name });
+          setCurrentUser(profile);
+          setHydrationState('ACTIVE');
+          addActivity(`${data.name} completed onboarding`);
+        }
       } else {
-        const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, ...update } : u);
-        saveLocalUsers(users);
+        // Local mock for dev
+        setHydrationState('ACTIVE');
       }
-      setCurrentUser(prev => prev ? { ...prev, ...update } : null);
-      addActivity(`${data.name} completed onboarding`);
       return { success: true, message: 'Success' };
     } catch (err: any) {
       return { success: false, message: err.message || 'Could not save onboarding data.' };
@@ -355,8 +374,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     if (currentUser) addActivity(`${currentUser.name} logged out`);
     localStorage.removeItem('ss_current_user');
-    if (fbReady && currentUser?.id !== 'admin-local') signOut(auth);
+    if (fbReady) signOut(auth);
     setCurrentUser(null);
+    setHydrationState('ACTIVE');
   };
 
   const updateProfileFn = async (data: Partial<User> & { password?: string }) => {
@@ -568,7 +588,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      currentUser, authLoading, pendingGoogleUser,
+      currentUser, authLoading, hydrationState, pendingGoogleUser,
       login, register, loginWithGoogle, completeGoogleSignup, completeOnboarding, forgotPassword, logout, updateProfile: updateProfileFn,
       events, createEvent, updateEvent, deleteEvent, toggleEventRegistration,
       hackathons, createHackathon, updateHackathon, deleteHackathon, toggleHackathonRegistration,

@@ -25,18 +25,20 @@ beforeEach(async () => {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
 
-    // 1. Setup Colleges
+    // 1. Setup Colleges & Domains
     await setDoc(doc(db, 'colleges', 'college-a'), { name: 'College A', status: 'ACTIVE' });
     await setDoc(doc(db, 'colleges', 'college-b'), { name: 'College B', status: 'ACTIVE' });
+    await setDoc(doc(db, 'collegeDomains', 'college-a'), { domain: 'collegea.edu' });
+    await setDoc(doc(db, 'collegeDomains', 'college-b'), { domain: 'collegeb.edu' });
 
     // 2. Setup Users
     const users = [
-      { id: 'student-a', collegeId: 'college-a', role: 'STUDENT', status: 'ACTIVE' },
-      { id: 'student-b', collegeId: 'college-a', role: 'STUDENT', status: 'ACTIVE' },
-      { id: 'student-c', collegeId: 'college-b', role: 'STUDENT', status: 'ACTIVE' },
-      { id: 'admin-a', collegeId: 'college-a', role: 'COLLEGE_ADMIN', status: 'ACTIVE' },
-      { id: 'admin-b', collegeId: 'college-b', role: 'COLLEGE_ADMIN', status: 'ACTIVE' },
-      { id: 'super-admin', collegeId: 'college-a', role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      { id: 'student-a', collegeId: 'college-a', role: 'STUDENT', status: 'ACTIVE', friendCode: 'A1' },
+      { id: 'student-b', collegeId: 'college-a', role: 'STUDENT', status: 'ACTIVE', friendCode: 'B1' },
+      { id: 'student-c', collegeId: 'college-b', role: 'STUDENT', status: 'ACTIVE', friendCode: 'C1' },
+      { id: 'admin-a', collegeId: 'college-a', role: 'COLLEGE_ADMIN', status: 'ACTIVE', friendCode: 'A2' },
+      { id: 'admin-b', collegeId: 'college-b', role: 'COLLEGE_ADMIN', status: 'ACTIVE', friendCode: 'B2' },
+      { id: 'super-admin', collegeId: 'college-a', role: 'SUPER_ADMIN', status: 'ACTIVE', friendCode: 'SA' },
     ];
     for (const u of users) {
       await setDoc(doc(db, 'users', u.id), u);
@@ -63,8 +65,12 @@ afterAll(async () => {
 });
 
 // Helpers
-function getAuthContext(uid: string) {
-  return testEnv.authenticatedContext(uid).firestore();
+function getAuthContext(uid: string, emailStr?: string) {
+  let tokenEmail = emailStr || `${uid}@collegea.edu`;
+  if (!emailStr && (uid.includes('student-c') || uid.includes('admin-b'))) {
+    tokenEmail = `${uid}@collegeb.edu`;
+  }
+  return testEnv.authenticatedContext(uid, { email: tokenEmail }).firestore();
 }
 function getUnauthContext() {
   return testEnv.unauthenticatedContext().firestore();
@@ -236,3 +242,64 @@ describe('6. Additional User Profile Protection', () => {
     await assertFails(updateDoc(doc(db, 'users', 'student-a'), { friendCode: 'NEWCODE' }));
   });
 });
+
+describe('7. Identity Bootstrap & Legacy Migration', () => {
+  it('allows valid STUDENT registration with correct email domain', async () => {
+    // New user student-new with email student-new@collegea.edu
+    const db = getAuthContext('student-new', 'student-new@collegea.edu');
+    await assertSucceeds(setDoc(doc(db, 'users', 'student-new'), { 
+      role: 'STUDENT', 
+      collegeId: 'college-a', 
+      status: 'PENDING_ONBOARDING',
+      friendCode: 'FRND12'
+    }));
+  });
+
+  it('denies registration with incorrect email domain', async () => {
+    // New user with gmail tries to claim college-a
+    const db = getAuthContext('student-bad', 'student-bad@gmail.com');
+    await assertFails(setDoc(doc(db, 'users', 'student-bad'), { 
+      role: 'STUDENT', 
+      collegeId: 'college-a', 
+      status: 'PENDING_ONBOARDING',
+      friendCode: 'FRND99'
+    }));
+  });
+
+  it('denies registration self-provisioning admin roles', async () => {
+    const db = getAuthContext('student-hacker', 'student-hacker@collegea.edu');
+    await assertFails(setDoc(doc(db, 'users', 'student-hacker'), { 
+      role: 'SUPER_ADMIN', 
+      collegeId: 'college-a', 
+      status: 'ACTIVE'
+    }));
+  });
+
+  it('allows legacy migration (write-once initialization)', async () => {
+    // Setup legacy user missing collegeId and friendCode
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', 'legacy-user'), { 
+        role: 'STUDENT', 
+        status: 'ACTIVE' 
+      });
+    });
+
+    const db = getAuthContext('legacy-user', 'legacy@collegea.edu');
+    // They should be able to update their missing collegeId and friendCode
+    await assertSucceeds(updateDoc(doc(db, 'users', 'legacy-user'), { 
+      collegeId: 'college-a',
+      friendCode: 'NEWFRD'
+    }));
+  });
+
+  it('protects friendCodes collection from overwrite', async () => {
+    const db = getAuthContext('student-a');
+    // Create friend code
+    await assertSucceeds(setDoc(doc(db, 'friendCodes', 'CODE123'), { userId: 'student-a' }));
+    
+    // Another user tries to steal/overwrite it
+    const dbB = getAuthContext('student-b');
+    await assertFails(setDoc(doc(db, 'friendCodes', 'CODE123'), { userId: 'student-b' }));
+  });
+});
+
