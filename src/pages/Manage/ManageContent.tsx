@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import type { EventItem, Hackathon, Course } from '../../types';
+import type { AppEvent, Hackathon, Course } from '../../types';
 
 type Tab = 'events' | 'hackathons' | 'courses';
 type PanelMode = null | 'event' | 'hackathon' | 'course';
@@ -8,14 +8,14 @@ type PanelMode = null | 'event' | 'hackathon' | 'course';
 const iStyle: React.CSSProperties = { width: '100%', padding: '7px 10px', fontSize: 13.5, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' };
 
 export const ManageContent: React.FC = () => {
-  const { events, hackathons, courses, createEvent, updateEvent, deleteEvent, createHackathon, updateHackathon, deleteHackathon, createCourse, updateCourse, deleteCourse, showToast } = useApp();
+  const { events, hackathons, courses, communities, createEvent, updateEvent, deleteEvent, createHackathon, updateHackathon, deleteHackathon, createCourse, updateCourse, deleteCourse, showToast } = useApp();
   const [tab, setTab] = useState<Tab>('events');
   const [q, setQ] = useState('');
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [editId, setEditId] = useState<string | null>(null);
 
   // Event form
-  const [evForm, setEvForm] = useState<Partial<EventItem>>({ title: '', date: '', venue: '', capacity: 100, price: '$99', type: 'Conference', description: '', image: '' });
+  const [evForm, setEvForm] = useState<Partial<AppEvent> & { dateStr?: string }>({ title: '', scope: 'COLLEGE', communityId: '', location: '', description: '', dateStr: '' });
   // Hackathon form
   const [hackForm, setHackForm] = useState<Partial<Hackathon>>({ title: '', date: '', endDate: '', venue: '', mode: 'online', teamSizeMin: 2, teamSizeMax: 4, prizes: [''], description: '', image: '', capacity: 200 });
   // Course form
@@ -23,7 +23,17 @@ export const ManageContent: React.FC = () => {
 
   const openPanel = (mode: PanelMode, item?: any) => {
     setEditId(item?.id || null);
-    if (mode === 'event') setEvForm(item ? { ...item } : { title: '', date: '', venue: '', capacity: 100, price: '$99', type: 'Conference', description: '', image: '' });
+    if (mode === 'event') {
+      if (item) {
+        const d = new Date(item.startsAt);
+        // format to YYYY-MM-DDThh:mm
+        const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const day = String(d.getDate()).padStart(2,'0');
+        const h = String(d.getHours()).padStart(2,'0'); const min = String(d.getMinutes()).padStart(2,'0');
+        setEvForm({ ...item, dateStr: `${y}-${m}-${day}T${h}:${min}` });
+      } else {
+        setEvForm({ title: '', scope: 'COLLEGE', communityId: '', location: '', description: '', dateStr: '' });
+      }
+    }
     if (mode === 'hackathon') setHackForm(item ? { ...item, prizes: item.prizes || [''] } : { title: '', date: '', endDate: '', venue: '', mode: 'online', teamSizeMin: 2, teamSizeMax: 4, prizes: [''], description: '', image: '', capacity: 200 });
     if (mode === 'course') setCourseForm(item ? { ...item, syllabus: item.syllabus || [''] } : { title: '', description: '', image: '', category: 'Web Development', duration: '8 weeks', level: 'Beginner', syllabus: [''], capacity: 50, price: 'Free', mentor: '', mentorId: '' });
     setPanelMode(mode);
@@ -32,8 +42,19 @@ export const ManageContent: React.FC = () => {
 
   const submitEvent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editId) { updateEvent(editId, evForm); showToast(`Updated "${evForm.title}"`); }
-    else { createEvent(evForm as any); showToast(`Created "${evForm.title}"`); }
+    if (evForm.scope === 'COMMUNITY' && !evForm.communityId) return showToast('Please select a community');
+    const data: Partial<AppEvent> = { 
+      title: evForm.title, 
+      location: evForm.location, 
+      description: evForm.description,
+      scope: evForm.scope,
+      communityId: evForm.scope === 'COMMUNITY' ? evForm.communityId : null,
+      startsAt: new Date(evForm.dateStr || '').getTime(),
+      endsAt: new Date(evForm.dateStr || '').getTime() + 3600000,
+      registrationEnabled: true
+    };
+    if (editId) { updateEvent(editId, data); showToast(`Updated "${evForm.title}"`); }
+    else { createEvent(data as any); showToast(`Created "${evForm.title}"`); }
     closePanel();
   };
   const submitHackathon = (e: React.FormEvent) => {
@@ -91,14 +112,12 @@ export const ManageContent: React.FC = () => {
       {/* Events Table */}
       {tab === 'events' && (
         <div className="card"><div style={{ overflowX: 'auto' }}>
-          <table className="data-table"><thead><tr>{['Event', 'Date', 'Type', 'Fill', 'Price', 'Status', ''].map(h => <th key={h}>{h}</th>)}</tr></thead>
+          <table className="data-table"><thead><tr>{['Event', 'Date', 'Scope', 'Registrations', 'Status', ''].map(h => <th key={h}>{h}</th>)}</tr></thead>
             <tbody>{events.filter(e => !q || e.title.toLowerCase().includes(q.toLowerCase())).map(ev => {
-              const pct = ev.capacity > 0 ? Math.round((ev.registrationsCount / ev.capacity) * 100) : 0;
               return (<tr key={ev.id}><td><div style={{ fontWeight: 500 }} className="truncate">{ev.title}</div></td>
-                <td style={{ whiteSpace: 'nowrap' }}>{new Date(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                <td><span className="badge badge-gray">{ev.type}</span></td>
-                <td>{ev.registrationsCount}/{ev.capacity} <span style={{ fontWeight: 600 }}>({pct}%)</span></td>
-                <td style={{ fontWeight: 600 }}>{ev.price}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{new Date(ev.startsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                <td><span className="badge badge-gray">{ev.scope}</span></td>
+                <td>{ev.registrationCount}</td>
                 <td><span className={statusBadge(ev.status)}>{ev.status}</span></td>
                 <td><div style={{ display: 'flex', gap: 4 }}>
                   <button className="btn-icon" onClick={() => openPanel('event', ev)} title="Edit"><span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit</span></button>
@@ -160,15 +179,15 @@ export const ManageContent: React.FC = () => {
                 <div className="panel-body">
                   <div className="form-group"><label className="form-label">Title *</label><input style={iStyle} value={evForm.title ?? ''} onChange={e => setEvForm(p => ({ ...p, title: e.target.value }))} required /></div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <div className="form-group"><label className="form-label">Date *</label><input type="date" style={iStyle} value={evForm.date ?? ''} onChange={e => setEvForm(p => ({ ...p, date: e.target.value }))} required /></div>
-                    <div className="form-group"><label className="form-label">Category</label><select style={iStyle} value={evForm.type ?? 'Conference'} onChange={e => setEvForm(p => ({ ...p, type: e.target.value }))}><option>Conference</option><option>Workshop</option><option>Networking</option><option>Seminar</option></select></div>
+                    <div className="form-group"><label className="form-label">Scope</label><select style={iStyle} value={evForm.scope} onChange={e => setEvForm(p => ({ ...p, scope: e.target.value as any }))}><option value="COLLEGE">College-wide</option><option value="COMMUNITY">Community-specific</option></select></div>
+                    {evForm.scope === 'COMMUNITY' && (
+                      <div className="form-group"><label className="form-label">Community</label><select style={iStyle} value={evForm.communityId || ''} onChange={e => setEvForm(p => ({ ...p, communityId: e.target.value }))}><option value="">Select...</option>{communities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                    )}
                   </div>
-                  <div className="form-group"><label className="form-label">Venue *</label><input style={iStyle} value={evForm.venue ?? ''} onChange={e => setEvForm(p => ({ ...p, venue: e.target.value }))} required /></div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <div className="form-group"><label className="form-label">Capacity</label><input type="number" min={1} style={iStyle} value={evForm.capacity ?? 100} onChange={e => setEvForm(p => ({ ...p, capacity: parseInt(e.target.value) }))} /></div>
-                    <div className="form-group"><label className="form-label">Price</label><input style={iStyle} value={evForm.price ?? ''} onChange={e => setEvForm(p => ({ ...p, price: e.target.value }))} /></div>
+                    <div className="form-group"><label className="form-label">Starts At *</label><input type="datetime-local" style={iStyle} value={evForm.dateStr ?? ''} onChange={e => setEvForm(p => ({ ...p, dateStr: e.target.value }))} required /></div>
+                    <div className="form-group"><label className="form-label">Location *</label><input style={iStyle} value={evForm.location ?? ''} onChange={e => setEvForm(p => ({ ...p, location: e.target.value }))} required /></div>
                   </div>
-
                   <div className="form-group"><label className="form-label">Description *</label><textarea rows={3} style={{ ...iStyle, resize: 'vertical' } as any} value={evForm.description ?? ''} onChange={e => setEvForm(p => ({ ...p, description: e.target.value }))} required /></div>
                 </div>
                 <div className="panel-footer"><button type="button" className="btn btn-secondary" onClick={closePanel}>Cancel</button><button type="submit" className="btn btn-primary">{editId ? 'Save' : 'Publish'}</button></div>

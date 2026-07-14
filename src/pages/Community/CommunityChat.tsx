@@ -7,6 +7,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../../firebase';
 import { useApp } from '../../context/AppContext';
+import { CommunityFeed } from './CommunityFeed';
 import type { AppChatMessage } from '../../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ function getAuthUid(): string | null {
   return auth.currentUser?.uid ?? null;
 }
 
-type ActiveTab = 'chat' | 'events';
+type ActiveTab = 'chat' | 'feed' | 'events';
 
 export const CommunityChat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -208,10 +209,14 @@ export const CommunityChat: React.FC = () => {
     e.preventDefault();
     if (!evTitle || !evDate) return;
     await createEvent({
-      title: evTitle, date: evDate, venue: evVenue || 'Online',
-      description: evDesc, capacity: parseInt(evCap) || 50,
-      price: 'Free', image: '', type: 'Community Event',
+      title: evTitle, 
+      startsAt: new Date(evDate).getTime(),
+      endsAt: new Date(evDate).getTime() + 3600000,
+      location: evVenue || 'Online',
+      description: evDesc, 
+      scope: 'COMMUNITY',
       communityId: id,
+      registrationEnabled: true
     });
     showToast(`Event "${evTitle}" created!`);
     setEvTitle(''); setEvDate(''); setEvVenue(''); setEvDesc(''); setEvCap('50');
@@ -298,7 +303,7 @@ export const CommunityChat: React.FC = () => {
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        {(['chat', 'events'] as ActiveTab[]).map(t => (
+        {(['chat', 'feed', 'events'] as ActiveTab[]).map(t => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
             padding: '10px 20px', fontSize: 13.5, fontWeight: 600,
             background: 'none', border: 'none', cursor: 'pointer',
@@ -307,9 +312,9 @@ export const CommunityChat: React.FC = () => {
             transition: 'all 120ms', display: 'flex', alignItems: 'center', gap: 6,
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-              {t === 'chat' ? 'forum' : 'event'}
+              {t === 'chat' ? 'forum' : t === 'feed' ? 'dynamic_feed' : 'event'}
             </span>
-            {t === 'chat' ? 'Group Chat' : 'Events'}
+            {t === 'chat' ? 'Group Chat' : t === 'feed' ? 'Community Feed' : 'Events'}
             {t === 'events' && communityEvs.length > 0 && (
               <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 99, fontSize: 10, padding: '1px 6px', fontWeight: 700 }}>
                 {communityEvs.length}
@@ -426,6 +431,16 @@ export const CommunityChat: React.FC = () => {
         </>
       )}
 
+      {/* ── FEED TAB ───────────────────────────────────────────────────── */}
+      {activeTab === 'feed' && isMember && (
+        <CommunityFeed communityId={community.id} />
+      )}
+      {activeTab === 'feed' && !isMember && (
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+          Join the community to view posts.
+        </div>
+      )}
+
       {/* ── EVENTS TAB ─────────────────────────────────────────────────── */}
       {activeTab === 'events' && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 0' }}>
@@ -453,20 +468,21 @@ export const CommunityChat: React.FC = () => {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {communityEvs
-                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .sort((a, b) => a.startsAt - b.startsAt)
                 .map(ev => {
-                  const isPast = new Date(ev.date) < new Date();
+                  const isPast = ev.startsAt < Date.now();
+                  const d = new Date(ev.startsAt);
                   return (
-                    <div key={ev.id} className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div key={ev.id} className="card" onClick={() => navigate(`/events/${ev.id}`)} style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer' }}>
                       <div style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', background: isPast ? 'var(--bg)' : gradBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: isPast ? '1px solid var(--border)' : 'none' }}>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: isPast ? 'var(--text-muted)' : '#fff', lineHeight: 1 }}>{new Date(ev.date).getDate()}</div>
-                        <div style={{ fontSize: 9, fontWeight: 600, color: isPast ? 'var(--text-muted)' : 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{new Date(ev.date).toLocaleString('default', { month: 'short' })}</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: isPast ? 'var(--text-muted)' : '#fff', lineHeight: 1 }}>{d.getDate()}</div>
+                        <div style={{ fontSize: 9, fontWeight: 600, color: isPast ? 'var(--text-muted)' : 'rgba(255,255,255,0.8)', textTransform: 'uppercase' }}>{d.toLocaleString('default', { month: 'short' })}</div>
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{ev.title}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 12 }}>
-                          <span>{ev.venue}</span>
-                          <span>{ev.registrationsCount}/{ev.capacity} registered</span>
+                          <span>{ev.location}</span>
+                          <span>{ev.registrationCount} registered</span>
                         </div>
                         {ev.description && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{ev.description}</div>}
                       </div>

@@ -25,6 +25,7 @@ import { MyCalendar } from './pages/Calendar/MyCalendar';
 import { UserProfile } from './pages/Profile/UserProfile';
 import { Friends } from './pages/Profile/Friends';
 import { Messages } from './pages/Messages/Messages';
+import { EventDetail } from './pages/Events/EventDetail';
 
 /** Renders the full route tree + the onboarding overlay when needed */
 const AppContent: React.FC = () => {
@@ -57,6 +58,9 @@ const AppContent: React.FC = () => {
         } />
         <Route path="/communities/:id" element={
           <ProtectedRoute><AppShell><CommunityChat /></AppShell></ProtectedRoute>
+        } />
+        <Route path="/events/:eventId" element={
+          <ProtectedRoute><AppShell><EventDetail /></AppShell></ProtectedRoute>
         } />
         <Route path="/calendar" element={
           <ProtectedRoute><AppShell><MyCalendar /></AppShell></ProtectedRoute>

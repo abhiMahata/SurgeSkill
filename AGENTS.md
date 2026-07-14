@@ -337,4 +337,4 @@ A task is not complete until:
 - `TESTING_STRATEGY.md` will define proof of correctness.
 
 ## Acceptance Criteria
-This policy is effective when agents inspect before editing, remain within bounded scope, preserve brownfield systems, avoid hallucinated repository facts, respect security and Git boundaries, validate changes, synchronize documentation, report evidence, and remain suitable for future multi-agent orchestration.
+This policy is effective when agents inspect before editing, remain within bounded scope, preserve brownfield systems, avoid hallucinated repository facts, respect security and Git boundaries, validate changes, synchronize documentation, report evidence, and remain suitable for future multi-agent orchestration.If a required MVP feature has no existing UI, implement the minimum production-quality interface necessary to expose and validate the backend. This is considered implementation, not a redesign. Preserve the existing layout, routing, styling, and design system.

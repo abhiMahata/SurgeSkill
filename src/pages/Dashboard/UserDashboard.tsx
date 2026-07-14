@@ -24,21 +24,21 @@ function seedColor(str: string): string {
 }
 
 export const UserDashboard: React.FC = () => {
-  const { currentUser, events, courses, communities, toggleCourseEnrollment, toggleEventRegistration, showToast, myMemberships, memberCounts } = useApp();
+  const { currentUser, events, courses, communities, toggleCourseEnrollment, toggleEventRegistration, showToast, myMemberships, memberCounts, myEventRegistrations } = useApp();
   const navigate = useNavigate();
 
   const enrolledIds   = currentUser?.enrolledCourses    ?? [];
-  const regEventIds   = currentUser?.registeredEvents   ?? [];
+
   const joinedCommIds = Object.keys(myMemberships).filter(id => myMemberships[id].status === 'ACTIVE');
 
   const myCourses  = courses.filter(c => enrolledIds.includes(c.id));
   const myComms    = communities.filter(c => joinedCommIds.includes(c.id));
-  const myEvents   = events.filter(e => regEventIds.includes(e.id));
+  const myEvents   = events.filter(e => myEventRegistrations.includes(e.id));
 
   // Only show events that haven't passed yet, sorted by date
   const upcomingEvs = events
-    .filter(e => new Date(e.date) >= new Date() && e.status !== 'Completed' && e.status !== 'Cancelled')
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .filter(e => e.startsAt >= Date.now() && e.status !== 'COMPLETED' && e.status !== 'CANCELLED')
+    .sort((a, b) => a.startsAt - b.startsAt)
     .slice(0, 4);
 
   // Courses not yet enrolled in — only real ones from DB
@@ -275,10 +275,10 @@ export const UserDashboard: React.FC = () => {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 0 }}>
             {upcomingEvs.map((ev, i) => {
-              const isReg = regEventIds.includes(ev.id);
-              const d = new Date(ev.date);
+              const isReg = myEventRegistrations.includes(ev.id);
+              const d = new Date(ev.startsAt);
               return (
-                <div key={ev.id} style={{ padding: '14px 16px', borderRight: i < upcomingEvs.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div key={ev.id} onClick={() => navigate(`/events/${ev.id}`)} style={{ padding: '14px 16px', borderRight: i < upcomingEvs.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                     <div style={{
                       width: 42, height: 42, borderRadius: 'var(--radius-md)', flexShrink: 0,
@@ -292,16 +292,17 @@ export const UserDashboard: React.FC = () => {
                     </div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>{ev.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{ev.venue}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{ev.location}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{ev.price}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{ev.scope}</span>
                     <button
                       className={`btn btn-sm ${isReg ? 'btn-ghost' : 'btn-primary'}`}
                       style={{ fontSize: 12, padding: '4px 10px' }}
-                      onClick={() => {
-                        const r = toggleEventRegistration(ev.id);
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const r = await toggleEventRegistration(ev.id);
                         if (r.success) showToast(r.registered ? `Registered for "${ev.title}"` : `Left "${ev.title}"`);
                       }}
                     >

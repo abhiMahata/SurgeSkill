@@ -141,6 +141,35 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if false;
       }
+
+      match /posts/{postId} {
+        allow read: if isAuth() && userCollegeId() == getCommunityCollegeId(communityId);
+        allow create: if isAuth() && 
+          isActiveMember(communityId, request.auth.uid) &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.resource.data.communityId == communityId &&
+          request.resource.data.collegeId == getCommunityCollegeId(communityId);
+        allow update: if isAuth() && isSelf(resource.data.authorId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'attachments', 'updatedAt']);
+        allow delete: if isAuth() && (isSelf(resource.data.authorId) || isCollegeAdmin(resource.data.collegeId));
+        
+        match /comments/{commentId} {
+          allow read: if isAuth() && userCollegeId() == getCommunityCollegeId(communityId);
+          allow create: if isAuth() && 
+            isActiveMember(communityId, request.auth.uid) &&
+            request.resource.data.authorId == request.auth.uid;
+          allow update: if isAuth() && isSelf(resource.data.authorId) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'updatedAt']);
+          allow delete: if isAuth() && (isSelf(resource.data.authorId) || isCollegeAdmin(resource.data.collegeId));
+        }
+
+        match /likes/{userId} {
+          allow read: if isAuth() && userCollegeId() == getCommunityCollegeId(communityId);
+          allow create, delete: if isAuth() && 
+            isActiveMember(communityId, request.auth.uid) && 
+            request.auth.uid == userId;
+        }
+      }
     }
 
     // ── Community Read States ────────────────────────────────────────────────
@@ -148,6 +177,33 @@ service cloud.firestore {
       allow read: if isAuth() && isSelf(resource.data.userId);
       allow create: if isAuth() && isSelf(request.resource.data.userId);
       allow update: if isAuth() && isSelf(resource.data.userId) && isSelf(request.resource.data.userId);
+    }
+
+    // ── Events ───────────────────────────────────────────────────────────────
+    match /events/{eventId} {
+      allow read: if isAuth() && userCollegeId() == resource.data.collegeId;
+      allow create: if isAuth() && 
+        userCollegeId() == request.resource.data.collegeId &&
+        isSelf(request.resource.data.createdBy) &&
+        (
+          (request.resource.data.scope == 'COLLEGE' && isCollegeAdmin(request.resource.data.collegeId)) ||
+          (request.resource.data.scope == 'COMMUNITY' && isActiveMember(request.resource.data.communityId, request.auth.uid))
+        );
+      allow update: if isAuth() && userCollegeId() == resource.data.collegeId && (
+        isCollegeAdmin(resource.data.collegeId) || isSelf(resource.data.createdBy) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registrationCount'])
+      );
+      allow delete: if isAuth() && (isCollegeAdmin(resource.data.collegeId) || isSelf(resource.data.createdBy));
+    }
+
+    // ── Event Registrations ──────────────────────────────────────────────────
+    match /eventRegistrations/{regId} {
+      allow read: if isAuth() && userCollegeId() == resource.data.collegeId;
+      allow create: if isAuth() && 
+        userCollegeId() == request.resource.data.collegeId &&
+        isSelf(request.resource.data.userId) &&
+        regId == request.resource.data.eventId + '_' + request.resource.data.userId;
+      allow delete: if isAuth() && isSelf(resource.data.userId);
     }
 
     // ── Friend Requests ──────────────────────────────────────────────────────

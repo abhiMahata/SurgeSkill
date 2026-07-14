@@ -10,12 +10,12 @@ import {
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import type {
-  User, UserRole, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser, AppCommunityMember,
-  FriendRequest, Friendship, Block, Conversation, ConversationMessage, StorageMetadata
+  User, UserRole, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser, AppCommunityMember,
+  FriendRequest, Friendship, Block, Conversation, ConversationMessage, StorageMetadata, AppEvent, EventRegistration
 } from '../types';
 import { hashPassword, verifyPassword } from '../utils/auth';
 
-export type { User, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser };
+export type { User, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser, AppEvent, EventRegistration };
 
 export interface PendingGoogleUser { uid: string; name: string; email: string; photoURL: string; }
 
@@ -36,11 +36,12 @@ interface AppContextType {
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   updateProfile: (data: Partial<User> & { password?: string }) => Promise<boolean>;
-  events: EventItem[];
-  createEvent: (data: Omit<EventItem, 'id' | 'registrationsCount' | 'status'>) => Promise<void>;
-  updateEvent: (id: string, data: Partial<EventItem>) => void;
+  events: AppEvent[];
+  myEventRegistrations: string[];
+  createEvent: (data: Omit<AppEvent, 'id' | 'registrationCount' | 'status' | 'createdAt' | 'updatedAt' | 'collegeId' | 'createdBy'>) => Promise<void>;
+  updateEvent: (id: string, data: Partial<AppEvent>) => void;
   deleteEvent: (id: string) => void;
-  toggleEventRegistration: (id: string) => { success: boolean; registered: boolean };
+  toggleEventRegistration: (id: string) => Promise<{ success: boolean; registered: boolean }>;
   hackathons: Hackathon[];
   createHackathon: (data: Omit<Hackathon, 'id' | 'registrationsCount' | 'status'>) => Promise<void>;
   updateHackathon: (id: string, data: Partial<Hackathon>) => void;
@@ -101,7 +102,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authLoading, setAuthLoading]         = useState(true);
   const [hydrationState, setHydrationState]   = useState<HydrationState>('LOADING');
   const [pendingGoogleUser, setPendingGoogleUser] = useState<PendingGoogleUser | null>(null);
-  const [events, setEvents]                   = useState<EventItem[]>([]);
+  const [events, setEvents]                   = useState<AppEvent[]>([]);
+  const [myEventRegistrations, setMyEventRegistrations] = useState<string[]>([]);
   const [hackathons, setHackathons]           = useState<Hackathon[]>([]);
   const [courses, setCourses]                 = useState<Course[]>([]);
   const [communities, setCommunities]         = useState<Community[]>([]);
@@ -169,7 +171,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const unsubs: (() => void)[] = [];
-    unsubs.push(onSnapshot(collection(db, 'events'),      s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as EventItem)))));
+    unsubs.push(onSnapshot(collection(db, 'events'),      s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as AppEvent)))));
+    if (auth.currentUser) {
+      unsubs.push(onSnapshot(query(collection(db, 'eventRegistrations'), where('userId', '==', auth.currentUser.uid)), s => {
+        setMyEventRegistrations(s.docs.map(d => d.data().eventId));
+      }));
+    }
     unsubs.push(onSnapshot(collection(db, 'hackathons'),  s => setHackathons(s.docs.map(d => ({ id: d.id, ...d.data() } as Hackathon)))));
     unsubs.push(onSnapshot(collection(db, 'courses'),     s => setCourses(s.docs.map(d => ({ id: d.id, ...d.data() } as Course)))));
     unsubs.push(onSnapshot(collection(db, 'communities'), s => setCommunities(s.docs.map(d => ({ id: d.id, ...d.data() } as Community)))));
@@ -494,17 +501,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ── Events ────────────────────────────────────────────────────────────────
-  const createEvent = async (data: Omit<EventItem, 'id' | 'registrationsCount' | 'status'>) => {
-    const ev: EventItem = { ...data, id: `ev-${Date.now()}`, registrationsCount: 0, status: 'Confirmed',
-      image: data.image || '',
-      createdBy: currentUser?.id || '' };
+  const createEvent = async (data: Omit<AppEvent, 'id' | 'registrationCount' | 'status' | 'createdAt' | 'updatedAt' | 'collegeId' | 'createdBy'>) => {
+    if (!currentUser) return;
+    const ev: AppEvent = { 
+      ...data, 
+      id: `ev-${Date.now()}`, 
+      collegeId: currentUser.collegeId || 'surgeskill',
+      createdBy: currentUser.id,
+      registrationCount: 0, 
+      status: 'ACTIVE',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
     if (fbReady) await setDoc(doc(db, 'events', ev.id), ev);
     else { const u = [...events, ev]; setEvents(u); persistLocal('ss_events', u); }
     addActivity(`Created event "${data.title}"`);
   };
-  const updateEvent = (id: string, data: Partial<EventItem>) => {
-    if (fbReady) updateDoc(doc(db, 'events', id), data as any);
-    else { const u = events.map(e => e.id === id ? { ...e, ...data } : e); setEvents(u); persistLocal('ss_events', u); }
+  const updateEvent = (id: string, data: Partial<AppEvent>) => {
+    if (fbReady) updateDoc(doc(db, 'events', id), { ...data, updatedAt: Date.now() });
+    else { const u = events.map(e => e.id === id ? { ...e, ...data, updatedAt: Date.now() } : e); setEvents(u); persistLocal('ss_events', u); }
   };
   const deleteEvent = (id: string) => {
     const t = events.find(e => e.id === id);
@@ -512,20 +527,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     else { const u = events.filter(e => e.id !== id); setEvents(u); persistLocal('ss_events', u); }
     addActivity(`Deleted event "${t?.title}"`);
   };
-  const toggleEventRegistration = (id: string) => {
+  const toggleEventRegistration = async (id: string) => {
     if (!currentUser) return { success: false, registered: false };
-    const isReg = currentUser.registeredEvents.includes(id);
-    const newList = isReg ? currentUser.registeredEvents.filter(e => e !== id) : [...currentUser.registeredEvents, id];
-    setCurrentUser(prev => prev ? { ...prev, registeredEvents: newList } : null);
+    const regId = `${id}_${currentUser.id}`;
+    const isReg = myEventRegistrations.includes(id);
+    
     if (fbReady) {
-      updateDoc(doc(db, 'users', currentUser.id), { registeredEvents: newList });
-      updateDoc(doc(db, 'events', id), { registrationsCount: increment(isReg ? -1 : 1) });
-    } else {
-      const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, registeredEvents: newList } : u);
-      saveLocalUsers(users);
-      const evs = events.map(e => e.id === id ? { ...e, registrationsCount: e.registrationsCount + (isReg ? -1 : 1) } : e);
-      setEvents(evs); persistLocal('ss_events', evs);
+      if (isReg) {
+        await deleteDoc(doc(db, 'eventRegistrations', regId));
+      } else {
+        await setDoc(doc(db, 'eventRegistrations', regId), {
+          eventId: id,
+          userId: currentUser.id,
+          collegeId: currentUser.collegeId || 'surgeskill',
+          registeredAt: Date.now()
+        });
+      }
+      await updateDoc(doc(db, 'events', id), { registrationCount: increment(isReg ? -1 : 1) });
     }
+    
     addActivity(`${currentUser.name} ${isReg ? 'left' : 'registered for'} event`);
     return { success: true, registered: !isReg };
   };
@@ -900,7 +920,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       currentUser, authLoading, hydrationState, pendingGoogleUser,
       login, register, loginWithGoogle, completeGoogleSignup, completeOnboarding, forgotPassword, logout, updateProfile: updateProfileFn,
-      events, createEvent, updateEvent, deleteEvent, toggleEventRegistration,
+      events, myEventRegistrations, createEvent, updateEvent, deleteEvent, toggleEventRegistration,
       hackathons, createHackathon, updateHackathon, deleteHackathon, toggleHackathonRegistration,
       courses, createCourse, updateCourse, deleteCourse, toggleCourseEnrollment,
       communities, createCommunity, joinCommunity, leaveCommunity,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import type { EventItem, Hackathon, Course, ActivityLog, Community } from '../../types';
+import type { AppEvent, Hackathon, Course, ActivityLog, Community } from '../../types';
 
 const statusBadge = (s: string) => {
   const m: Record<string, string> = {
@@ -18,7 +18,7 @@ export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<'overview' | 'communities' | 'events' | 'activity'>('overview');
 
-  const totalEventRegs   = events.reduce((s: number, e: EventItem)     => s + e.registrationsCount, 0);
+  const totalEventRegs   = events.reduce((s: number, e: AppEvent)     => s + e.registrationCount, 0);
   const totalHackRegs    = hackathons.reduce((s: number, h: Hackathon)  => s + h.registrationsCount, 0);
   const totalCourseEnrolls = courses.reduce((s: number, c: Course)     => s + c.enrolledCount, 0);
   const totalEngagement  = totalEventRegs + totalHackRegs + totalCourseEnrolls;
@@ -26,7 +26,7 @@ export const AdminDashboard: React.FC = () => {
   const handleExport = () => {
     const csv = [
       'ID,Title,Type,Date,Engagement,Capacity,Status',
-      ...events.map((e: EventItem) => `"${e.id}","${e.title}","Event","${e.date}",${e.registrationsCount},${e.capacity},"${e.status}"`),
+      ...events.map((e: AppEvent) => `"${e.id}","${e.title}","Event","${new Date(e.startsAt).toISOString()}","${e.registrationCount}","","${e.status}"`),
       ...hackathons.map((h: Hackathon) => `"${h.id}","${h.title}","Hackathon","${h.date}",${h.registrationsCount},${h.capacity},"${h.status}"`),
       ...courses.map((c: Course) => `"${c.id}","${c.title}","Course","",${c.enrolledCount},${c.capacity},"${c.status}"`),
     ].join('\n');
@@ -123,7 +123,7 @@ export const AdminDashboard: React.FC = () => {
                 <thead><tr>{['Content', 'Type', 'Engagement', 'Status'].map(h => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>
                   {[
-                    ...events.map((e: EventItem) => ({ ...e, _type: 'Event', _eng: e.registrationsCount })),
+                    ...events.map((e: AppEvent) => ({ ...e, _type: 'Event', _eng: e.registrationCount })),
                     ...hackathons.map((h: Hackathon) => ({ ...h, _type: 'Hackathon', _eng: h.registrationsCount })),
                     ...courses.map((c: Course) => ({ ...c, _type: 'Course', _eng: c.enrolledCount })),
                   ]
@@ -242,7 +242,7 @@ export const AdminDashboard: React.FC = () => {
                 <thead><tr>{['Title', 'Type', 'Date', 'Registrations', 'Status'].map(h => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>
                   {[
-                    ...events.map((e: EventItem) => ({ ...e, _type: 'Event', _date: e.date, _eng: e.registrationsCount })),
+                    ...events.map((e: AppEvent) => ({ ...e, _type: 'Event', _date: new Date(e.startsAt).toISOString().split('T')[0], _eng: e.registrationCount })),
                     ...hackathons.map((h: Hackathon) => ({ ...h, _type: 'Hackathon', _date: h.date, _eng: h.registrationsCount })),
                     ...courses.map((c: Course) => ({ ...c, _type: 'Course', _date: '', _eng: c.enrolledCount })),
                   ]

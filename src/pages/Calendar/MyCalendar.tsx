@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import type { EventItem, Hackathon } from '../../types';
+import type { AppEvent, Hackathon } from '../../types';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -17,26 +17,27 @@ type CalendarItem = {
   venue: string;
   price?: string;
   isHackathon?: boolean;
-  raw: EventItem | Hackathon;
+  raw: AppEvent | Hackathon;
 };
 
 export const MyCalendar: React.FC = () => {
-  const { currentUser, events, hackathons, toggleEventRegistration, toggleHackathonRegistration, showToast } = useApp();
+  const { currentUser, events, myEventRegistrations, hackathons, toggleEventRegistration, toggleHackathonRegistration, showToast } = useApp();
   const today = new Date();
   const [year, setYear]   = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [selected, setSelected] = useState<CalendarItem | null>(null);
 
-  const regEvents = currentUser?.registeredEvents ?? [];
   const regHacks  = currentUser?.registeredHackathons ?? [];
 
   // Generate calendar items
   const calendarItems: CalendarItem[] = [];
   
-  events.filter(e => regEvents.includes(e.id)).forEach(e => {
+  events.filter(e => myEventRegistrations.includes(e.id)).forEach(e => {
+    const d = new Date(e.startsAt);
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     calendarItems.push({
-      id: e.id, title: e.title, date: e.date, type: e.type, status: e.status,
-      image: e.image, description: e.description, venue: e.venue, price: e.price,
+      id: e.id, title: e.title, date: ds, type: e.scope, status: e.status,
+      image: '', description: e.description, venue: e.location, price: '',
       isHackathon: false, raw: e
     });
   });
@@ -71,12 +72,12 @@ export const MyCalendar: React.FC = () => {
     return calendarItems.filter(ci => ci.date === ds || (ci.endDate && ds >= ci.date && ds <= ci.endDate));
   };
 
-  const handleLeave = (ci: CalendarItem) => {
+  const handleLeave = async (ci: CalendarItem) => {
     if (ci.isHackathon) {
       const r = toggleHackathonRegistration(ci.id);
       if (r.success && !r.registered) { showToast(`Left "${ci.title}"`); setSelected(null); }
     } else {
-      const r = toggleEventRegistration(ci.id);
+      const r = await toggleEventRegistration(ci.id);
       if (r.success && !r.registered) { showToast(`Left "${ci.title}"`); setSelected(null); }
     }
   };

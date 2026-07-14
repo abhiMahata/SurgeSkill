@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 
 type Tab = 'events' | 'hackathons' | 'courses';
@@ -43,14 +44,14 @@ const EmptyContent: React.FC<{ icon: string; title: string; desc: string }> = ({
 );
 
 export const ExploreAll: React.FC = () => {
+  const navigate = useNavigate();
   const {
-    currentUser, events, hackathons, courses,
+    currentUser, events, hackathons, courses, myEventRegistrations,
     toggleEventRegistration, toggleHackathonRegistration, toggleCourseEnrollment, showToast,
   } = useApp();
   const [tab, setTab] = useState<Tab>('events');
   const [q, setQ] = useState('');
 
-  const regEvents  = currentUser?.registeredEvents   ?? [];
   const regHacks   = currentUser?.registeredHackathons ?? [];
   const enCourses  = currentUser?.enrolledCourses    ?? [];
 
@@ -103,7 +104,7 @@ export const ExploreAll: React.FC = () => {
       {/* ── Events Tab ── */}
       {tab === 'events' && (() => {
         const filtered = events.filter(e =>
-          !q || e.title.toLowerCase().includes(q.toLowerCase()) || e.venue.toLowerCase().includes(q.toLowerCase())
+          !q || e.title.toLowerCase().includes(q.toLowerCase()) || e.location.toLowerCase().includes(q.toLowerCase())
         );
         if (filtered.length === 0) return (
           <EmptyContent
@@ -117,15 +118,13 @@ export const ExploreAll: React.FC = () => {
         return (
           <div className="card">
             {filtered.map((ev, idx) => {
-              const isReg = regEvents.includes(ev.id);
-              const spots = Math.max(0, ev.capacity - ev.registrationsCount);
-              const canToggle = ev.status !== 'Completed' && ev.status !== 'Cancelled';
-              const d = new Date(ev.date);
+              const isReg = myEventRegistrations.includes(ev.id);
+              const d = new Date(ev.startsAt);
               return (
-                <div key={ev.id} style={{
+                <div key={ev.id} onClick={() => navigate(`/events/${ev.id}`)} style={{
                   display: 'flex', gap: 14, padding: '16px 20px',
                   borderBottom: idx < filtered.length - 1 ? '1px solid var(--border)' : 'none',
-                  alignItems: 'flex-start',
+                  alignItems: 'flex-start', cursor: 'pointer',
                   background: isReg ? 'rgba(37,99,235,0.02)' : 'transparent',
                 }}>
                   {/* Date icon block — no image, purely from data */}
@@ -151,7 +150,7 @@ export const ExploreAll: React.FC = () => {
                       </span>
                       <span>
                         <span className="material-symbols-outlined" style={{ fontSize: 13, verticalAlign: 'middle', marginRight: 3 }}>pin_drop</span>
-                        {ev.venue}
+                        {ev.location}
                       </span>
                     </div>
                     {ev.description && (
@@ -161,22 +160,20 @@ export const ExploreAll: React.FC = () => {
                     )}
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <span className={statusBadge(ev.status)}>{ev.status}</span>
-                      <span className="badge badge-gray">{ev.type}</span>
-                      <span style={{ fontSize: 12, color: spots === 0 ? 'var(--red)' : 'var(--text-muted)' }}>
-                        {spots > 0 ? `${spots} spots left` : 'Full'}
-                      </span>
+                      <span className="badge badge-gray">{ev.scope}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, flexShrink: 0 }}>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{ev.price}</span>
-                    {canToggle ? (
-                      <button
-                        className={`btn btn-sm ${isReg ? 'btn-danger' : 'btn-primary'}`}
-                        onClick={() => { const r = toggleEventRegistration(ev.id); if (r.success) showToast(r.registered ? `Registered for "${ev.title}"` : `Left "${ev.title}"`); }}
-                      >
-                        {isReg ? 'Leave' : 'Register'}
-                      </button>
-                    ) : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Closed</span>}
+                    <button
+                      className={`btn btn-sm ${isReg ? 'btn-danger' : 'btn-primary'}`}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const r = await toggleEventRegistration(ev.id); 
+                        if (r.success) showToast(r.registered ? `Registered for "${ev.title}"` : `Left "${ev.title}"`); 
+                      }}
+                    >
+                      {isReg ? 'Leave' : 'Register'}
+                    </button>
                   </div>
                 </div>
               );

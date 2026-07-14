@@ -31,21 +31,7 @@ export interface User {
   photoURL?: string;
 }
 
-export interface EventItem {
-  id: string;
-  title: string;
-  date: string;
-  venue: string;
-  capacity: number;
-  price: string;
-  image: string;
-  description: string;
-  type: string;
-  registrationsCount: number;
-  status: 'Confirmed' | 'Draft' | 'Cancelled' | 'Completed';
-  createdBy?: string;
-  communityId?: string;
-}
+
 
 export interface Hackathon {
   id: string;
@@ -233,6 +219,32 @@ export interface Comment {
   status: 'ACTIVE' | 'DELETED' | 'MODERATED';
   createdAt: number;
   updatedAt: number;
+}
+
+export interface AppEvent {
+  id: string;
+  collegeId: string;
+  communityId: string | null;
+  scope: 'COLLEGE' | 'COMMUNITY';
+  title: string;
+  description: string;
+  location: string;
+  startsAt: number;
+  endsAt: number;
+  createdBy: string;
+  status: 'ACTIVE' | 'CANCELLED' | 'COMPLETED';
+  registrationEnabled: boolean;
+  registrationCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EventRegistration {
+  id: string; // eventId_userId
+  eventId: string;
+  userId: string;
+  collegeId: string;
+  registeredAt: number;
 }
 
 export interface PostLike {
