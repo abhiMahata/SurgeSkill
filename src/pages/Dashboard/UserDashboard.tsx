@@ -24,12 +24,12 @@ function seedColor(str: string): string {
 }
 
 export const UserDashboard: React.FC = () => {
-  const { currentUser, events, courses, communities, toggleCourseEnrollment, toggleEventRegistration, showToast } = useApp();
+  const { currentUser, events, courses, communities, toggleCourseEnrollment, toggleEventRegistration, showToast, myMemberships, memberCounts } = useApp();
   const navigate = useNavigate();
 
   const enrolledIds   = currentUser?.enrolledCourses    ?? [];
   const regEventIds   = currentUser?.registeredEvents   ?? [];
-  const joinedCommIds = currentUser?.joinedCommunities  ?? [];
+  const joinedCommIds = Object.keys(myMemberships).filter(id => myMemberships[id].status === 'ACTIVE');
 
   const myCourses  = courses.filter(c => enrolledIds.includes(c.id));
   const myComms    = communities.filter(c => joinedCommIds.includes(c.id));
@@ -216,7 +216,7 @@ export const UserDashboard: React.FC = () => {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.memberIds?.length || 0} members</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{memberCounts[c.id] || 0} members</div>
                       </div>
                       <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-muted)' }}>chevron_right</span>
                     </div>

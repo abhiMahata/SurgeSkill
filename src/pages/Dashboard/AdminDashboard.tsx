@@ -14,7 +14,7 @@ const statusBadge = (s: string) => {
 };
 
 export const AdminDashboard: React.FC = () => {
-  const { currentUser, events, hackathons, courses, communities, activities, deleteCommunity, showToast } = useApp() as any;
+  const { currentUser, events, hackathons, courses, communities, activities, deleteCommunity, showToast, memberCounts } = useApp() as any;
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<'overview' | 'communities' | 'events' | 'activity'>('overview');
 
@@ -167,7 +167,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.memberIds?.length || 0} members</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{memberCounts[c.id] || 0} members</div>
                 </div>
               </div>
             ))}
@@ -209,7 +209,7 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </td>
                     <td><span className={`badge ${c.type === 'college' ? 'badge-blue' : 'badge-green'}`}>{c.type}</span></td>
-                    <td style={{ fontWeight: 600 }}>{c.memberIds?.length || 0}</td>
+                    <td style={{ fontWeight: 600 }}>{memberCounts[c.id] || 0}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/communities/${c.id}`)}>Open</button>

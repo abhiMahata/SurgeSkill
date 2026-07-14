@@ -12,7 +12,7 @@ const iStyle: React.CSSProperties = {
 };
 
 export const Communities: React.FC = () => {
-  const { currentUser, communities, createCommunity, joinCommunity, leaveCommunity, showToast } = useApp();
+  const { currentUser, communities, createCommunity, joinCommunity, leaveCommunity, showToast, myMemberships, memberCounts } = useApp();
   const navigate = useNavigate();
 
   const [q, setQ]                   = useState('');
@@ -59,7 +59,7 @@ export const Communities: React.FC = () => {
     : [];
   const interestCommunities   = filtered(visibleCommunities.filter(c => c.type === 'interest'));
 
-  const isMember = (c: Community) => c.memberIds?.includes(currentUser?.id || '');
+  const isMember = (c: Community) => !!myMemberships[c.id] && myMemberships[c.id].status === 'ACTIVE';
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +132,7 @@ export const Communities: React.FC = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>group</span>
-              {c.memberIds?.length || 0} members
+              {memberCounts[c.id] || 0} members
             </span>
             <div style={{ display: 'flex', gap: 6 }}>
               {member ? (

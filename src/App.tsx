@@ -23,6 +23,8 @@ import { CommunityChat } from './pages/Community/CommunityChat';
 // Other
 import { MyCalendar } from './pages/Calendar/MyCalendar';
 import { UserProfile } from './pages/Profile/UserProfile';
+import { Friends } from './pages/Profile/Friends';
+import { Messages } from './pages/Messages/Messages';
 
 /** Renders the full route tree + the onboarding overlay when needed */
 const AppContent: React.FC = () => {
@@ -61,6 +63,12 @@ const AppContent: React.FC = () => {
         } />
         <Route path="/profile" element={
           <ProtectedRoute><AppShell><UserProfile /></AppShell></ProtectedRoute>
+        } />
+        <Route path="/friends" element={
+          <ProtectedRoute><AppShell><Friends /></AppShell></ProtectedRoute>
+        } />
+        <Route path="/messages" element={
+          <ProtectedRoute><AppShell><Messages /></AppShell></ProtectedRoute>
         } />
 
         <Route path="*" element={<Navigate to="/" replace />} />

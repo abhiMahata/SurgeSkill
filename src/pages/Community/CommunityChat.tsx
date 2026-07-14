@@ -4,10 +4,10 @@ import {
   collection, addDoc, onSnapshot, query,
   orderBy, limit, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
-import { auth, db } from '../../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage } from '../../firebase';
 import { useApp } from '../../context/AppContext';
-import type { ChatMessage } from '../../types';
+import type { AppChatMessage } from '../../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function sanitize(text: string) {
@@ -38,9 +38,10 @@ export const CommunityChat: React.FC = () => {
   const {
     currentUser, communities, joinCommunity, leaveCommunity,
     events, createEvent, showToast,
+    subscribeTyping, setTyping, typingUsers, myMemberships, memberCounts
   } = useApp();
 
-  const [messages, setMessages]       = useState<ChatMessage[]>([]);
+  const [messages, setMessages]       = useState<AppChatMessage[]>([]);
   const [input, setInput]             = useState('');
   const [sending, setSending]         = useState(false);
   const [joining, setJoining]         = useState(false);
@@ -59,8 +60,23 @@ export const CommunityChat: React.FC = () => {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const community     = communities.find(c => c.id === id);
-  const isMember      = !!(community?.memberIds?.includes(currentUser?.id || ''));
+  const isMember      = !!(community && myMemberships[community.id]?.status === 'ACTIVE');
   const communityEvs  = events.filter(e => e.communityId === id);
+
+  // ── Track Read State ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!id || !currentUser || !isMember || !db) return;
+    const updateReadState = async () => {
+      try {
+        await setDoc(doc(db, 'communityReadStates', `${id}_${currentUser.id}`), {
+          communityId: id,
+          userId: currentUser.id,
+          lastReadAt: Date.now()
+        }, { merge: true });
+      } catch (e) {}
+    };
+    updateReadState();
+  }, [id, currentUser, isMember]);
 
   // ── Ensure we have a Firebase Auth session ────────────────────────────────
   // Admin bypasses Firebase Auth via AppContext, so we sign them in
@@ -83,8 +99,8 @@ export const CommunityChat: React.FC = () => {
       q,
       snap => {
         const msgs = snap.docs
-          .map(d => ({ id: d.id, ...d.data() } as ChatMessage))
-          .sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+          .map(d => ({ id: d.id, ...d.data() } as AppChatMessage))
+          .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
         setMessages(msgs);
         setChatError('');
       },
@@ -115,29 +131,50 @@ export const CommunityChat: React.FC = () => {
   };
 
   // ── Send message ──────────────────────────────────────────────────────────
-  const sendMessage = useCallback(async (text: string, mediaBase64?: string, mediaType?: string) => {
-    if (!currentUser || !id || (!text.trim() && !mediaBase64)) return;
+  const sendMessage = useCallback(async (text: string, file?: File) => {
+    if (!currentUser || !id || (!text.trim() && !file)) return;
     setSending(true);
 
-    // If still no auth session, try anonymous sign-in once more
-    if (!auth.currentUser) {
-      try { await signInAnonymously(auth); } catch {}
+    const uid = getAuthUid() ?? currentUser.id;
+    const safeText = sanitize(text.trim());
+    
+    const attachments = [];
+    if (file) {
+      try {
+        const storageRef = ref(storage, `communities/${id}/${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        attachments.push({
+          storagePath: storageRef.fullPath,
+          fileName: file.name,
+          mimeType: file.type,
+          size: file.size,
+          url
+        });
+      } catch (err) {
+        console.error('Upload failed:', err);
+        showToast('Failed to upload image.');
+        setSending(false);
+        return;
+      }
     }
 
-    const uid = getAuthUid();
-    const safeText = sanitize(text.trim());
-    const msg = {
+    // Mention metadata extraction
+    const mentions = safeText.match(/@(\w+)/g);
+    const mentionedUserIds = mentions ? mentions.map(m => m.substring(1)) : [];
+
+    const msg: Omit<AppChatMessage, 'id'> = {
+      collegeId:    community?.collegeId || currentUser.collegeId || '',
       communityId:  id,
-      // Use the Firebase Auth UID as senderId so Firestore rules pass.
-      // For real users this equals currentUser.id. For admin-anonymous it's the anon UID.
-      senderId:     uid ?? currentUser.id,
+      senderId:     uid,
       senderName:   sanitize(currentUser.name),
       senderPhoto:  currentUser.photoURL ?? '',
-      senderUserId: currentUser.id,   // keep app-level ID for display matching
-      text:         safeText,
-      mediaBase64,
-      mediaType,
-      timestamp:    Date.now(),
+      content:      safeText,
+      attachments,
+      replyToMessageId: null,
+      mentionedUserIds,
+      status:       'ACTIVE',
+      createdAt:    Date.now(),
     };
 
     try {
@@ -161,10 +198,8 @@ export const CommunityChat: React.FC = () => {
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 500 * 1024) { alert('Image must be under 500 KB.'); return; }
-    const reader = new FileReader();
-    reader.onload = () => sendMessage('', reader.result as string, file.type);
-    reader.readAsDataURL(file);
+    if (file.size > 2 * 1024 * 1024) { alert('Image must be under 2 MB.'); return; }
+    sendMessage('', file);
     e.target.value = '';
   };
 
@@ -188,9 +223,10 @@ export const CommunityChat: React.FC = () => {
   const fmtDate = (ts: number) => new Date(ts).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
 
   // Group messages by calendar date
-  const grouped: { date: string; msgs: ChatMessage[] }[] = [];
+  const grouped: { date: string; msgs: AppChatMessage[] }[] = [];
   messages.forEach(m => {
-    const d = fmtDate(m.timestamp ?? 0);
+    if (m.status !== 'ACTIVE') return;
+    const d = fmtDate(m.createdAt ?? 0);
     const last = grouped[grouped.length - 1];
     if (last && last.date === d) last.msgs.push(m);
     else grouped.push({ date: d, msgs: [m] });
@@ -216,7 +252,7 @@ export const CommunityChat: React.FC = () => {
     );
   }
 
-  const memberCount = community.memberIds?.length ?? 0;
+  const memberCount = memberCounts[community.id] ?? 0;
   const gradBg = community.type === 'college'
     ? 'linear-gradient(135deg,#1d4ed8,#7c3aed)'
     : 'linear-gradient(135deg,#059669,#1d4ed8)';
@@ -340,25 +376,13 @@ export const CommunityChat: React.FC = () => {
                           border: isMe ? 'none' : '1px solid var(--border)',
                           wordBreak: 'break-word', boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
                         }}>
-                          {m.mediaBase64 && (
-                            <img src={m.mediaBase64} alt="shared" style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block', marginBottom: m.text ? 6 : 0 }} />
-                          )}
-                          {m.text && <span>{m.text}</span>}
+                          {m.attachments?.map((a, i) => (
+                            a.url && <img key={i} src={a.url} alt="shared" style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block', marginBottom: m.content ? 6 : 0 }} />
+                          ))}
+                          {m.content && <span>{m.content}</span>}
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
-                          <span>{fmtTime(m.timestamp ?? 0)}</span>
-                          {(isMe || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN' || currentUser?.role === 'admin') && (
-                            <button
-                              title="Delete"
-                              onClick={async () => {
-                                try { await deleteDoc(doc(db, 'communities', id!, 'messages', m.id)); }
-                                catch { showToast('Could not delete message.'); }
-                              }}
-                              style={{ fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
-                            >
-                              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>delete</span>
-                            </button>
-                          )}
+                          <span>{fmtTime(m.createdAt ?? 0)}</span>
                         </div>
                       </div>
                     </div>

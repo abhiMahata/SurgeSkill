@@ -20,24 +20,27 @@ Recommended top-level collections:
 ```text
 colleges/
 collegeDomains/
+friendCodes/
 users/
+
 communities/
-communityMembers/
-communitySuspensions/
 posts/
-communityMessages/
 events/
-eventRegistrations/
+
 friendRequests/
 friendships/
 blocks/
+
 conversations/
 notifications/
+communityReadStates/
 ```
 
 Nested subcollections are used where ownership is strong:
 - posts/{postId}/comments
 - posts/{postId}/likes
+- communities/{communityId}/members
+- communities/{communityId}/messages
 - conversations/{conversationId}/messages
 
 ## Entity Model
@@ -59,6 +62,13 @@ Fields:
 - status
 - createdAt
 - createdBy
+
+### friendCodes/{friendCode}
+
+Fields
+
+- userId
+- createdAt
 
 ### users/{uid}
 Fields:
@@ -97,8 +107,10 @@ Fields:
 - createdAt
 - updatedAt
 
-### communityMembers/{communityId_userId}
+### communities/{communityId}/members/{userId}
+
 Fields:
+
 - communityId
 - userId
 - collegeId
@@ -153,16 +165,12 @@ Fields:
 - userId
 - createdAt
 
-### communityMessages/{messageId}
+### communityReadStates/{communityId_userId}
 Fields:
-- collegeId
 - communityId
-- senderId
-- content
-- attachments
-- replyToMessageId
-- status
-- createdAt
+- userId
+- collegeId
+- lastReadAt
 
 ### events/{eventId}
 Fields:
@@ -230,6 +238,24 @@ Fields:
 - lastMessageSenderId
 - status
 - createdAt
+
+### communities/{communityId}/messages/{messageId}
+
+Fields:
+- collegeId
+- communityId
+- senderId
+- content
+- attachments
+- replyToMessageId
+- mentionedUserIds
+- status
+- createdAt
+
+Notes:
+- Student messages are immutable.
+- Message editing is excluded from the MVP.
+- Message deletion is excluded from the MVP.
 
 ### conversations/{pairId}/messages/{messageId}
 Fields:

@@ -76,7 +76,7 @@ function Field({ label, value, onChange, type = 'text', disabled, placeholder, m
 
 // ── Component ──
 export const UserProfile: React.FC = () => {
-  const { currentUser, updateProfile, showToast, theme, setTheme } = useApp();
+  const { currentUser, updateProfile, showToast, theme, setTheme, myMemberships } = useApp();
 
   const [name, setName]   = useState(currentUser?.name ?? '');
   const [desig, setDesig] = useState(currentUser?.designation ?? '');
@@ -180,7 +180,7 @@ export const UserProfile: React.FC = () => {
             {/* Communities joined */}
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Communities</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 500 }}>{currentUser.joinedCommunities?.length || 0} joined</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 500 }}>{Object.keys(myMemberships).filter(k => myMemberships[k].status === 'ACTIVE').length} joined</div>
             </div>
           </div>
 

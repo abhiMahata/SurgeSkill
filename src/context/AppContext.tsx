@@ -6,11 +6,12 @@ import {
 } from 'firebase/auth';
 import {
   doc, getDoc, setDoc, updateDoc, collection, onSnapshot,
-  addDoc, deleteDoc, query, orderBy, limit, increment, serverTimestamp,
+  addDoc, deleteDoc, query, orderBy, limit, increment, serverTimestamp, getCountFromServer, where
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import type {
-  User, UserRole, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser,
+  User, UserRole, EventItem, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser, AppCommunityMember,
+  FriendRequest, Friendship, Block, Conversation, ConversationMessage, StorageMetadata
 } from '../types';
 import { hashPassword, verifyPassword } from '../utils/auth';
 
@@ -56,6 +57,28 @@ interface AppContextType {
   leaveCommunity: (id: string) => void;
   activities: ActivityLog[];
   addActivity: (action: string) => void;
+  myMemberships: Record<string, AppCommunityMember>;
+  memberCounts: Record<string, number>;
+  suspendMember: (communityId: string, userId: string) => Promise<void>;
+  restoreMember: (communityId: string, userId: string) => Promise<void>;
+  
+  // Friends
+  friendRequests: FriendRequest[];
+  friendships: Friendship[];
+  blocks: Block[];
+  searchFriendCode: (code: string) => Promise<AppUser | null>;
+  sendFriendRequest: (targetId: string) => Promise<void>;
+  acceptFriendRequest: (targetId: string) => Promise<void>;
+  rejectFriendRequest: (targetId: string) => Promise<void>;
+  removeFriend: (targetId: string) => Promise<void>;
+  blockUser: (targetId: string) => Promise<void>;
+  unblockUser: (targetId: string) => Promise<void>;
+
+  // Direct Messaging
+  conversations: Conversation[];
+  sendDirectMessage: (targetId: string, text: string, attachments?: StorageMetadata[]) => Promise<void>;
+  markConversationRead: (targetId: string) => Promise<void>;
+
   theme: 'light' | 'dark';
   setTheme: (t: 'light' | 'dark') => void;
   toast: { message: string; visible: boolean };
@@ -87,6 +110,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (localStorage.getItem('ss_theme') as 'light' | 'dark') || 'light');
   const [toast, setToast]                     = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
   const [typingUsers, setTypingUsers]         = useState<TypingUser[]>([]);
+  const [myMemberships, setMyMemberships]     = useState<Record<string, AppCommunityMember>>({});
+  const [memberCounts, setMemberCounts]       = useState<Record<string, number>>({});
+  
+  const [friendRequests, setFriendRequests]   = useState<FriendRequest[]>([]);
+  const [friendships, setFriendships]         = useState<Friendship[]>([]);
+  const [blocks, setBlocks]                   = useState<Block[]>([]);
+  const [conversations, setConversations]     = useState<Conversation[]>([]);
+  
   const typingTimerRef                        = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((message: string) => {
@@ -145,6 +176,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     unsubs.push(onSnapshot(query(collection(db, 'activities'), orderBy('ts', 'desc'), limit(50)), s =>
       setActivities(s.docs.map(d => d.data() as ActivityLog))));
 
+    // We do NOT use onAuthStateChanged for fetching memberships directly here because we need communities array first.
+
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
         // Enforce email verification (for password auth, skip if google because google auto-verifies)
@@ -173,6 +206,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return () => { unsubAuth(); unsubs.forEach(u => u()); };
   }, [fbReady]);
+
+  // Fetch myMemberships when communities or currentUser changes
+  useEffect(() => {
+    if (!fbReady || !currentUser || !currentUser.collegeId) return;
+    const fetchMemberships = async () => {
+      const mems: Record<string, AppCommunityMember> = {};
+      await Promise.all(communities.map(async (c) => {
+        try {
+          const snap = await getDoc(doc(db, 'communities', c.id, 'members', currentUser.id));
+          if (snap.exists()) {
+             mems[c.id] = snap.data() as AppCommunityMember;
+          }
+        } catch (e) {}
+      }));
+      setMyMemberships(mems);
+    };
+    if (communities.length > 0) fetchMemberships();
+  }, [communities.length, currentUser?.id, fbReady]);
+
+  // Fetch memberCounts for all communities
+  useEffect(() => {
+    if (!fbReady || communities.length === 0) return;
+    const fetchCounts = async () => {
+      const counts: Record<string, number> = {};
+      await Promise.all(communities.map(async (c) => {
+        try {
+          const q = query(collection(db, 'communities', c.id, 'members'), where('status', '==', 'ACTIVE'));
+          const snapshot = await getCountFromServer(q);
+          counts[c.id] = snapshot.data().count;
+        } catch (e) {
+          counts[c.id] = 0;
+        }
+      }));
+      setMemberCounts(counts);
+    };
+    fetchCounts();
+  }, [communities.length, fbReady]);
+
+  // ── Friends Listeners ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!fbReady || !currentUser) return;
+    const unsubs: (() => void)[] = [];
+    
+    unsubs.push(onSnapshot(collection(db, 'friendRequests'), s => {
+      const all = s.docs.map(d => ({ id: d.id, ...d.data() } as FriendRequest));
+      setFriendRequests(all.filter(r => r.senderId === currentUser.id || r.receiverId === currentUser.id));
+    }));
+    
+    unsubs.push(onSnapshot(collection(db, 'friendships'), s => {
+      const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Friendship));
+      setFriendships(all.filter(f => f.userIds.includes(currentUser.id)));
+    }));
+    
+    unsubs.push(onSnapshot(collection(db, 'blocks'), s => {
+      const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Block));
+      setBlocks(all.filter(b => b.userIds.includes(currentUser.id)));
+    }));
+
+    unsubs.push(onSnapshot(collection(db, 'conversations'), s => {
+      const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
+      setConversations(all.filter(c => c.participantIds.includes(currentUser.id)).sort((a, b) => b.lastMessageAt - a.lastMessageAt));
+    }));
+
+    return () => unsubs.forEach(u => u());
+  }, [fbReady, currentUser?.id]);
 
   const getLocalUsers = () => JSON.parse(localStorage.getItem('ss_users') || '[]');
   const saveLocalUsers = (u: any[]) => localStorage.setItem('ss_users', JSON.stringify(u));
@@ -526,18 +624,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [currentUser, fbReady]);
 
-  // ── Communities ───────────────────────────────────────────────────────────
-  const createCommunity = async (data: Omit<Community, 'id' | 'memberIds'>) => {
-    if (currentUser?.role !== 'admin') throw new Error('Only admins can create communities.');
-    const memberIds = [currentUser?.id || ''];
+  const createCommunity = async (data: Omit<Community, 'id' | 'memberIds' | 'memberCount'>) => {
+    if (currentUser?.role !== 'SUPER_ADMIN' && currentUser?.role !== 'COLLEGE_ADMIN' && currentUser?.role !== 'admin') throw new Error('Only admins can create communities.');
+    
     if (fbReady) {
-      // Don't embed a custom `id` — let Firestore generate the document ID.
-      // The onSnapshot listener maps `d.id` (the real Firestore doc ID) onto each community.
-      const ref = await addDoc(collection(db, 'communities'), { ...data, memberIds });
+      const ref = await addDoc(collection(db, 'communities'), data);
+      await setDoc(doc(db, 'communities', ref.id, 'members', currentUser.id), {
+        communityId: ref.id,
+        userId: currentUser.id,
+        collegeId: currentUser.collegeId,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        joinedAt: Date.now()
+      });
       addActivity(`Created community "${data.name}"`);
       return ref.id;
     } else {
-      const c: Community = { ...data, id: `comm-${Date.now()}`, memberIds };
+      const c: Community = { ...data, id: `comm-${Date.now()}` } as any;
       const u = [...communities, c];
       setCommunities(u);
       persistLocal('ss_communities', u);
@@ -547,43 +650,250 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const joinCommunity = async (id: string) => {
-    if (!currentUser) return;
-    const comm = communities.find(c => c.id === id);
-    if (!comm || comm.memberIds.includes(currentUser.id)) return;
-    const updated = [...comm.memberIds, currentUser.id];
-    // Optimistic update first
-    const updatedComms = communities.map(c => c.id === id ? { ...c, memberIds: updated } : c);
-    setCommunities(updatedComms);
-    if (!fbReady) persistLocal('ss_communities', updatedComms);
-    const newJoined = [...(currentUser.joinedCommunities || []), id];
-    setCurrentUser(prev => prev ? { ...prev, joinedCommunities: newJoined } : null);
-    // Then persist
+    if (!currentUser || !currentUser.collegeId) return;
+    if (myMemberships[id] && myMemberships[id].status === 'ACTIVE') return;
+
+    // Optimistic
+    setMyMemberships(prev => ({
+      ...prev,
+      [id]: {
+        id: `${id}_${currentUser.id}`,
+        communityId: id,
+        userId: currentUser.id,
+        collegeId: currentUser.collegeId!,
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        joinedAt: Date.now()
+      }
+    }));
+
     if (fbReady) {
-      await updateDoc(doc(db, 'communities', id), { memberIds: updated });
-      await updateDoc(doc(db, 'users', currentUser.id), { joinedCommunities: newJoined });
-    } else {
-      const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, joinedCommunities: newJoined } : u);
-      saveLocalUsers(users);
+      try {
+        await setDoc(doc(db, 'communities', id, 'members', currentUser.id), {
+          communityId: id,
+          userId: currentUser.id,
+          collegeId: currentUser.collegeId,
+          role: 'MEMBER',
+          status: 'ACTIVE',
+          joinedAt: Date.now()
+        });
+      } catch (err: any) {
+        console.error(err);
+        showToast('Error joining community');
+      }
     }
     addActivity(`${currentUser.name} joined community`);
   };
 
-  const leaveCommunity = (id: string) => {
+  const leaveCommunity = async (id: string) => {
     if (!currentUser) return;
-    const comm = communities.find(c => c.id === id);
-    if (!comm) return;
-    const updated = comm.memberIds.filter(m => m !== currentUser.id);
-    const updatedComms = communities.map(c => c.id === id ? { ...c, memberIds: updated } : c);
-    setCommunities(updatedComms);
-    if (fbReady) updateDoc(doc(db, 'communities', id), { memberIds: updated });
-    else persistLocal('ss_communities', updatedComms);
-    const newJoined = (currentUser.joinedCommunities || []).filter(c => c !== id);
-    setCurrentUser(prev => prev ? { ...prev, joinedCommunities: newJoined } : null);
-    if (fbReady) updateDoc(doc(db, 'users', currentUser.id), { joinedCommunities: newJoined });
-    else {
-      const users = getLocalUsers().map((u: any) => u.id === currentUser.id ? { ...u, joinedCommunities: newJoined } : u);
-      saveLocalUsers(users);
+    
+    // Optimistic update
+    setMyMemberships(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+
+    if (fbReady) {
+      try {
+        await updateDoc(doc(db, 'communities', id, 'members', currentUser.id), {
+          status: 'INACTIVE'
+        });
+      } catch (err: any) {
+        console.error('Leave community failed:', err);
+        showToast('Failed to leave community');
+      }
     }
+  };
+
+  const suspendMember = async (communityId: string, userId: string) => {
+    if (!fbReady) return;
+    try {
+      await updateDoc(doc(db, 'communities', communityId, 'members', userId), {
+        status: 'SUSPENDED'
+      });
+      showToast('Member suspended');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Failed to suspend member');
+    }
+  };
+
+  const restoreMember = async (communityId: string, userId: string) => {
+    if (!fbReady) return;
+    try {
+      await updateDoc(doc(db, 'communities', communityId, 'members', userId), {
+        status: 'ACTIVE'
+      });
+      showToast('Member restored');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Failed to restore member');
+    }
+  };
+
+  // ── Friends System ────────────────────────────────────────────────────────
+  
+  const getPairId = (u1: string, u2: string) => (u1 < u2 ? `${u1}_${u2}` : `${u2}_${u1}`);
+
+  const searchFriendCode = async (code: string): Promise<User | null> => {
+    try {
+      const snap = await getDoc(doc(db, 'friendCodes', code.toUpperCase()));
+      if (snap.exists()) {
+        const uId = snap.data().userId;
+        const uSnap = await getDoc(doc(db, 'users', uId));
+        return uSnap.exists() ? { id: uSnap.id, ...uSnap.data() } as User : null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const sendFriendRequest = async (targetId: string) => {
+    if (!currentUser || !fbReady) return;
+    const pairId = getPairId(currentUser.id, targetId);
+    try {
+      await setDoc(doc(db, 'friendRequests', pairId), {
+        collegeId: currentUser.collegeId,
+        senderId: currentUser.id,
+        receiverId: targetId,
+        status: 'PENDING',
+        createdAt: Date.now(),
+        respondedAt: null
+      });
+      showToast('Friend request sent!');
+    } catch (e) {
+      showToast('Could not send request.');
+    }
+  };
+
+  const acceptFriendRequest = async (targetId: string) => {
+    if (!currentUser || !fbReady) return;
+    const pairId = getPairId(currentUser.id, targetId);
+    try {
+      await updateDoc(doc(db, 'friendRequests', pairId), {
+        status: 'ACCEPTED',
+        respondedAt: Date.now()
+      });
+      await setDoc(doc(db, 'friendships', pairId), {
+        collegeId: currentUser.collegeId,
+        userIds: [currentUser.id, targetId].sort(),
+        status: 'ACTIVE',
+        createdAt: Date.now()
+      });
+      showToast('Friend request accepted!');
+    } catch (e) {
+      showToast('Could not accept request.');
+    }
+  };
+
+  const rejectFriendRequest = async (targetId: string) => {
+    if (!currentUser || !fbReady) return;
+    const pairId = getPairId(currentUser.id, targetId);
+    try {
+      await updateDoc(doc(db, 'friendRequests', pairId), {
+        status: 'REJECTED',
+        respondedAt: Date.now()
+      });
+      showToast('Friend request rejected.');
+    } catch (e) {
+      showToast('Could not reject request.');
+    }
+  };
+
+  const removeFriend = async (targetId: string) => {
+    if (!currentUser || !fbReady) return;
+    const pairId = getPairId(currentUser.id, targetId);
+    try {
+      await deleteDoc(doc(db, 'friendships', pairId));
+      await deleteDoc(doc(db, 'friendRequests', pairId));
+      showToast('Friend removed.');
+    } catch (e) {
+      showToast('Could not remove friend.');
+    }
+  };
+
+  const blockUser = async (targetId: string) => {
+    if (!currentUser || !fbReady) return;
+    const pairId = getPairId(currentUser.id, targetId);
+    try {
+      await setDoc(doc(db, 'blocks', pairId), {
+        collegeId: currentUser.collegeId,
+        userIds: [currentUser.id, targetId].sort(),
+        initiatedBy: currentUser.id,
+        status: 'ACTIVE',
+        createdAt: Date.now()
+      });
+      try { await deleteDoc(doc(db, 'friendships', pairId)); } catch {}
+      try { await deleteDoc(doc(db, 'friendRequests', pairId)); } catch {}
+      showToast('User blocked.');
+    } catch (e) {
+      showToast('Could not block user.');
+    }
+  };
+
+  const unblockUser = async (targetId: string) => {
+    if (!currentUser || !fbReady) return;
+    const pairId = getPairId(currentUser.id, targetId);
+    try {
+      await deleteDoc(doc(db, 'blocks', pairId));
+      showToast('User unblocked.');
+    } catch (e) {
+      showToast('Could not unblock user.');
+    }
+  };
+
+  // ── Direct Messaging ──────────────────────────────────────────────────────
+
+  const sendDirectMessage = async (targetId: string, text: string, attachments: StorageMetadata[] = []) => {
+    if (!currentUser || !fbReady || (!text.trim() && attachments.length === 0)) return;
+    const pairId = getPairId(currentUser.id, targetId);
+
+    try {
+      // Upsert conversation document
+      const convRef = doc(db, 'conversations', pairId);
+      await setDoc(convRef, {
+        collegeId: currentUser.collegeId,
+        participantIds: [currentUser.id, targetId].sort(),
+        lastMessageText: text.trim() || (attachments.length > 0 ? 'Sent an attachment' : ''),
+        lastMessageAt: Date.now(),
+        lastMessageSenderId: currentUser.id,
+        status: 'ACTIVE',
+        createdAt: Date.now()
+      }, { merge: true });
+
+      // Add message to subcollection
+      const msg: Omit<ConversationMessage, 'id'> = {
+        senderId: currentUser.id,
+        content: text.trim(),
+        attachments,
+        status: 'ACTIVE',
+        createdAt: Date.now()
+      };
+      
+      const { collection, addDoc } = await import('firebase/firestore');
+      await addDoc(collection(db, 'conversations', pairId, 'messages'), msg);
+
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to send message.');
+      throw e;
+    }
+  };
+
+  const markConversationRead = async (targetId: string) => {
+    if (!currentUser || !fbReady) return;
+    const pairId = getPairId(currentUser.id, targetId);
+    try {
+      const convRef = doc(db, 'conversations', pairId);
+      await setDoc(convRef, {
+        readState: {
+          [currentUser.id]: Date.now()
+        }
+      }, { merge: true });
+    } catch (e) {}
   };
 
   return (
@@ -594,6 +904,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       hackathons, createHackathon, updateHackathon, deleteHackathon, toggleHackathonRegistration,
       courses, createCourse, updateCourse, deleteCourse, toggleCourseEnrollment,
       communities, createCommunity, joinCommunity, leaveCommunity,
+      myMemberships, memberCounts, suspendMember, restoreMember,
+      
+      friendRequests, friendships, blocks, searchFriendCode, sendFriendRequest,
+      acceptFriendRequest, rejectFriendRequest, removeFriend, blockUser, unblockUser,
+
+      conversations, sendDirectMessage, markConversationRead,
+
       activities, addActivity, theme, setTheme, toast, showToast,
       typingUsers, setTyping, subscribeTyping,
     }}>

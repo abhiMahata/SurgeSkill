@@ -95,7 +95,8 @@ export interface Community {
   description: string;
   type: 'college' | 'interest';
   college?: string;
-  memberIds: string[];
+  collegeId?: string;
+  memberCount?: number;
   createdBy: string;
   image?: string;
 }
@@ -185,7 +186,7 @@ export interface CommunityMember {
   userId: string;
   collegeId: string;
   role: 'MEMBER' | 'MODERATOR' | 'ADMIN';
-  status: 'ACTIVE' | 'INACTIVE';
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   joinedAt: number;
 }
 
@@ -205,6 +206,7 @@ export interface StorageMetadata {
   fileName: string;
   mimeType: string;
   size: number;
+  url?: string;
 }
 
 export interface Post {
@@ -244,6 +246,8 @@ export interface AppChatMessage {
   collegeId: string;
   communityId: string;
   senderId: string;
+  senderName?: string;
+  senderPhoto?: string;
   content: string;
   attachments: StorageMetadata[];
   replyToMessageId: string | null;

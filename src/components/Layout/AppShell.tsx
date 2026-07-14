@@ -6,6 +6,8 @@ const NAV: { label: string; icon: string; path: string; adminOnly?: boolean }[] 
   { label: 'Dashboard',   icon: 'space_dashboard', path: 'dashboard' },
   { label: 'Explore',     icon: 'search',          path: '/explore' },
   { label: 'Communities', icon: 'groups',          path: '/communities' },
+  { label: 'Friends',     icon: 'person_add',      path: '/friends' },
+  { label: 'Messages',    icon: 'chat',            path: '/messages' },
   { label: 'My Calendar', icon: 'calendar_today',  path: '/calendar' },
   { label: 'Manage',      icon: 'tune',            path: '/manage',  adminOnly: true },
 ];
