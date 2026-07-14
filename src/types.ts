@@ -120,3 +120,236 @@ export interface TypingUser {
   name: string;
   ts: number; // epoch ms — used to auto-expire stale typing signals
 }
+
+// ─── Target Architecture Types (Phase 1A) ─────────────────────────────
+
+export type AppRole = 'STUDENT' | 'COLLEGE_ADMIN' | 'SUPER_ADMIN';
+export type AccountStatus = 'PENDING_ONBOARDING' | 'ACTIVE' | 'SUSPENDED' | 'DISABLED';
+
+export interface College {
+  id: string; // Document ID
+  name: string;
+  shortName: string;
+  city: string;
+  state: string;
+  country: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: number;
+  createdBy: string;
+}
+
+export interface CollegeDomain {
+  id: string; // Document ID
+  domain: string;
+  collegeId: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: number;
+  createdBy: string;
+}
+
+export interface AppUser {
+  id: string; // UID
+  displayName: string;
+  email: string;
+  avatarUrl: string;
+  bio: string;
+  learningInterests: string[];
+  teachingInterests: string[];
+  course: string;
+  year: string;
+  friendCode: string;
+  collegeId: string;
+  role: AppRole;
+  status: AccountStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AppCommunity {
+  id: string;
+  collegeId: string;
+  name: string;
+  description: string;
+  category: string;
+  imageUrl: string;
+  createdBy: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  memberCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CommunityMember {
+  id: string; // communityId_userId
+  communityId: string;
+  userId: string;
+  collegeId: string;
+  role: 'MEMBER' | 'MODERATOR' | 'ADMIN';
+  status: 'ACTIVE' | 'INACTIVE';
+  joinedAt: number;
+}
+
+export interface CommunitySuspension {
+  id: string; // communityId_userId
+  communityId: string;
+  userId: string;
+  collegeId: string;
+  suspendedBy: string;
+  reason: string;
+  status: 'ACTIVE' | 'LIFTED';
+  createdAt: number;
+}
+
+export interface StorageMetadata {
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface Post {
+  id: string;
+  collegeId: string;
+  communityId: string;
+  authorId: string;
+  content: string;
+  attachments: StorageMetadata[]; // Max 5
+  likeCount: number;
+  commentCount: number;
+  status: 'ACTIVE' | 'DELETED' | 'MODERATED';
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Comment {
+  id: string;
+  collegeId: string;
+  communityId: string;
+  postId: string;
+  authorId: string;
+  content: string;
+  status: 'ACTIVE' | 'DELETED' | 'MODERATED';
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PostLike {
+  id: string; // userId
+  userId: string;
+  createdAt: number;
+}
+
+export interface AppChatMessage {
+  id: string;
+  collegeId: string;
+  communityId: string;
+  senderId: string;
+  content: string;
+  attachments: StorageMetadata[];
+  replyToMessageId: string | null;
+  mentionedUserIds: string[];
+  status: 'ACTIVE' | 'DELETED' | 'MODERATED';
+  createdAt: number;
+}
+
+export interface AppEvent {
+  id: string;
+  collegeId: string;
+  communityId: string | null;
+  scope: 'COLLEGE' | 'COMMUNITY';
+  title: string;
+  description: string;
+  location: string;
+  startsAt: number;
+  endsAt: number;
+  createdBy: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'CANCELLED';
+  registrationEnabled: boolean;
+  registrationCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EventRegistration {
+  id: string; // eventId_userId
+  eventId: string;
+  userId: string;
+  collegeId: string;
+  registeredAt: number;
+}
+
+export interface FriendRequest {
+  id: string; // canonical pairId
+  collegeId: string;
+  senderId: string;
+  receiverId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  createdAt: number;
+  respondedAt: number | null;
+}
+
+export interface Friendship {
+  id: string; // canonical pairId
+  collegeId: string;
+  userIds: string[];
+  status: 'ACTIVE' | 'BLOCKED';
+  createdAt: number;
+}
+
+export interface Block {
+  id: string; // canonical pairId
+  collegeId: string;
+  userIds: string[];
+  initiatedBy: string;
+  createdAt: number;
+  status: 'ACTIVE' | 'LIFTED';
+}
+
+export interface Conversation {
+  id: string; // canonical pairId
+  collegeId: string;
+  participantIds: string[];
+  lastMessageText: string;
+  lastMessageAt: number;
+  lastMessageSenderId: string;
+  readState: Record<string, number>; // userId -> timestamp
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: number;
+}
+
+export interface ConversationMessage {
+  id: string;
+  senderId: string;
+  content: string;
+  attachments: StorageMetadata[];
+  status: 'ACTIVE' | 'DELETED';
+  createdAt: number;
+}
+
+export interface Notification {
+  id: string;
+  recipientId: string;
+  collegeId: string;
+  type: 'DIRECT_MESSAGE' | 'FRIEND_REQUEST' | 'FRIEND_ACCEPTED' | 'EVENT_CREATED' | 'EVENT_UPDATED' | 'MENTION' | 'COMMUNITY_ANNOUNCEMENT';
+  actorId: string;
+  entityType: string;
+  entityId: string;
+  message: string;
+  read: boolean;
+  createdAt: number;
+}
+
+export interface FriendCode {
+  id: string; // friend code string
+  userId: string;
+  collegeId: string;
+  createdAt: number;
+}
+
+export interface CommunityReadState {
+  id: string; // communityId_userId
+  communityId: string;
+  userId: string;
+  collegeId: string;
+  lastReadAt: number;
+}

@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection, addDoc, onSnapshot, query,
   orderBy, limit, deleteDoc, doc, serverTimestamp,
-  signInAnonymously,
 } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
 import { auth, db } from '../../firebase';
 import { useApp } from '../../context/AppContext';
 import type { ChatMessage } from '../../types';

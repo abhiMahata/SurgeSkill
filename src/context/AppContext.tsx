@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signInWithPopup, signOut, updateProfile as fbUpdateProfile, sendPasswordResetEmail,
+  signInWithPopup, signOut, signInAnonymously,
+  updateProfile as fbUpdateProfile, sendPasswordResetEmail,
 } from 'firebase/auth';
 import {
   doc, getDoc, setDoc, updateDoc, collection, onSnapshot,
@@ -163,8 +164,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else {
         // Check if admin session is still active
         const email = localStorage.getItem('ss_current_user');
-        if (email === ADMIN_EMAIL) setCurrentUser(ADMIN_USER);
-        else setCurrentUser(null);
+        if (email === ADMIN_EMAIL) {
+          // Restore admin and sign in anonymously so Firestore rules pass
+          if (!auth.currentUser) { try { await signInAnonymously(auth); } catch {} }
+          setCurrentUser(ADMIN_USER);
+        } else {
+          setCurrentUser(null);
+        }
       }
       setAuthLoading(false);
     });
@@ -182,6 +188,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Admin intercept — credentials live in .env, not source code
     if (ADMIN_EMAIL && normEmail === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
       localStorage.setItem('ss_current_user', ADMIN_EMAIL);
+      // Give admin a real Firebase Auth token (anonymous) so Firestore writes succeed
+      if (fbReady && !auth.currentUser) {
+        try { await signInAnonymously(auth); } catch {}
+      }
       setCurrentUser(ADMIN_USER);
       addActivity('Admin logged in');
       return { success: true, message: 'Success' };

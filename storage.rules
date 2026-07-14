@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// SurgeSkill Storage Rules (Phase 1B Baseline)
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Explicit and narrowly bounded MIME types allowed for upload
+    function isAllowedImage() {
+      return request.resource.contentType in ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    }
+    
+    function isAllowedDocument() {
+      return request.resource.contentType == 'application/pdf';
+    }
+
+    // Size limitations based on REALTIME.md architecture
+    function isImageSizeValid() {
+      return request.resource.size < 3 * 1024 * 1024; // 3 MB
+    }
+    
+    function isDocumentSizeValid() {
+      return request.resource.size < 5 * 1024 * 1024; // 5 MB
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Allow authenticated users to upload and download attachments
+    match /attachments/{userId}/{fileName} {
+      // Must be authenticated to read
+      allow read: if isAuthenticated();
+      
+      // Must be authenticated and file must be a valid image or document with size limits
+      allow write: if isAuthenticated() && (
+        (isAllowedImage() && isImageSizeValid()) || 
+        (isAllowedDocument() && isDocumentSizeValid())
+      );
+    }
+  }
+}

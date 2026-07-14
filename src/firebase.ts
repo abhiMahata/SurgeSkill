@@ -1,7 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
+import { getAnalytics, type Analytics } from "firebase/analytics";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Firebase config is loaded from environment variables (.env).
 // See .env.example for the required keys. Never commit .env to version control.
@@ -19,8 +20,17 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const analytics = getAnalytics(app);
+
+// Analytics may not be available in all environments (e.g. tests, SSR).
+let analytics: Analytics | null = null;
+try {
+  analytics = getAnalytics(app);
+} catch {
+  // Analytics unavailable — safe to ignore.
+}
+export { analytics };
 
 export const auth           = getAuth(app);
 export const db             = getFirestore(app);
+export const storage        = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();

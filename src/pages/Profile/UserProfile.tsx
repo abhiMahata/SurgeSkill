@@ -116,13 +116,23 @@ export const UserProfile: React.FC = () => {
 
         {/* Left — identity */}
         <div className="card" style={{ padding: '24px 20px', textAlign: 'center', position: 'sticky', top: 68 }}>
-          <img
-            src={currentUser.photoURL || (currentUser.role === 'admin' || currentUser.role === 'mentor'
-              ? 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=facearea&facepad=3&w=128&h=128'
-              : 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=facearea&facepad=3&w=128&h=128')}
-            alt={currentUser.name}
-            style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)', marginBottom: 12 }}
-          />
+          {currentUser.photoURL ? (
+            <img
+              src={currentUser.photoURL}
+              alt={currentUser.name}
+              style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)', marginBottom: 12 }}
+            />
+          ) : (
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%', marginBottom: 12,
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22, fontWeight: 800, color: '#fff',
+              border: '2px solid var(--border)', flexShrink: 0,
+            }}>
+              {currentUser.name?.charAt(0)?.toUpperCase() || '?'}
+            </div>
+          )}
           <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{currentUser.name}</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>{currentUser.designation}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>{currentUser.organization}</div>

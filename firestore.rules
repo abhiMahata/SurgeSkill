@@ -6,73 +6,97 @@ service cloud.firestore {
     function isAuth() {
       return request.auth != null;
     }
-    function userRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
-    function isAdminOrMentor() {
-      return isAuth() && (userRole() == 'admin' || userRole() == 'mentor');
+    
+    function userRole() {
+      return getUserDoc().data.role;
+    }
+    
+    function userCollegeId() {
+      return getUserDoc().data.collegeId;
+    }
+    
+    function isCollegeAdmin(collegeId) {
+      return userRole() == 'COLLEGE_ADMIN' && userCollegeId() == collegeId;
+    }
+    
+    function isSuperAdmin() {
+      return userRole() == 'SUPER_ADMIN';
+    }
+    
+    function isSelf(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    function getCommunityCollegeId(communityId) {
+      return get(/databases/$(database)/documents/communities/$(communityId)).data.collegeId;
+    }
+
+    function isActiveMember(communityId, userId) {
+      return get(/databases/$(database)/documents/communities/$(communityId)/members/$(userId)).data.status == 'ACTIVE';
+    }
+    
+    function isModifyingProtectedUserFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(
+        ['role', 'collegeId', 'status', 'friendCode', 'createdAt', 'id', 'email']
+      );
+    }
+
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
     }
 
     // ── Users ───────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read:   if isAuth();
-      allow create: if isAuth() && request.auth.uid == userId;
-      allow update: if isAuth() && request.auth.uid == userId;
-      allow delete: if false; // no user deletion via client
+      // Anyone authenticated can read user profiles (might need tenant isolation later, but currently acceptable for public profiles)
+      // We will restrict read to auth for now.
+      allow read: if isAuth();
+      allow create: if isSelf(userId);
+      allow update: if isSelf(userId) && !isModifyingProtectedUserFields();
+      allow delete: if false; 
     }
 
     // ── Events ──────────────────────────────────────────────────────────────
     match /events/{eventId} {
-      allow read:   if isAuth();
-      allow create: if isAdminOrMentor();
-      allow update: if isAuth(); // students update registrationsCount via toggle
-      allow delete: if isAdminOrMentor();
-    }
-
-    // ── Hackathons ───────────────────────────────────────────────────────────
-    match /hackathons/{hackathonId} {
-      allow read:   if isAuth();
-      allow create: if isAdminOrMentor();
-      allow update: if isAuth();
-      allow delete: if isAdminOrMentor();
-    }
-
-    // ── Courses ──────────────────────────────────────────────────────────────
-    match /courses/{courseId} {
-      allow read:   if isAuth();
-      allow create: if isAdminOrMentor();
-      allow update: if isAuth();
-      allow delete: if isAdminOrMentor();
+      allow read: if isAuth();
+      allow create, update, delete: if isAuth() && isCollegeAdmin(resource.data.collegeId);
     }
 
     // ── Communities ──────────────────────────────────────────────────────────
     match /communities/{communityId} {
-      allow read:   if isAuth();
-      allow create: if isAuth();
-      allow update: if isAuth(); // join/leave updates memberIds
-      allow delete: if isAuth() && userRole() == 'admin';
+      allow read: if isAuth() && userCollegeId() == resource.data.collegeId;
+      allow create: if isAuth() && userCollegeId() == request.resource.data.collegeId;
+      allow update: if isAuth() && isCollegeAdmin(resource.data.collegeId);
+      allow delete: if isAuth() && isSuperAdmin();
 
-      // Messages subcollection
-      // Admin signs in anonymously — anonymous UID is used as senderId
+      match /members/{userId} {
+        allow read: if isAuth() && userCollegeId() == getCommunityCollegeId(communityId);
+        allow create: if isSelf(userId) && userCollegeId() == getCommunityCollegeId(communityId);
+        allow update: if isAuth() && isCollegeAdmin(getCommunityCollegeId(communityId));
+      }
+
       match /messages/{messageId} {
-        allow read:   if isAuth();
-        allow create: if isAuth()
-          && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.text is string;
+        allow read: if isAuth() && userCollegeId() == getCommunityCollegeId(communityId);
+        allow create: if isAuth() && 
+          isActiveMember(communityId, request.auth.uid) &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.communityId == communityId &&
+          request.resource.data.collegeId == getCommunityCollegeId(communityId);
         allow update: if false;
-        allow delete: if isAuth() && (
-          resource.data.senderId == request.auth.uid ||
-          request.auth.token.firebase.sign_in_provider == 'anonymous'
-        );
+        allow delete: if isAuth() && request.auth.uid == resource.data.senderId;
       }
     }
 
-    // ── Activity log ─────────────────────────────────────────────────────────
-    match /activities/{activityId} {
-      allow read:   if isAuth() && userRole() == 'admin';
-      allow create: if isAuth();
-      allow update: if false;
-      allow delete: if false;
+    // ── Conversations ────────────────────────────────────────────────────────
+    match /conversations/{conversationId} {
+      allow read: if isAuth() && request.auth.uid in resource.data.participantIds;
+      allow create: if isAuth() && request.auth.uid in request.resource.data.participantIds;
+      allow update: if isAuth() && request.auth.uid in resource.data.participantIds &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['participantIds']);
     }
   }
 }
