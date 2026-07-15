@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { AppNotification } from '../../types';
+import type { AppNotification } from '../../types';
 
 export const NotificationCenter: React.FC = () => {
   const { notifications, markNotificationRead, markAllNotificationsRead } = useApp();
