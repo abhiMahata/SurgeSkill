@@ -191,46 +191,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // We do NOT use onAuthStateChanged for fetching memberships directly here because we need communities array first.
+    let unsubAdminLogs: (() => void) | undefined;
 
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
-      if (fbUser) {
-        // Enforce email verification (for password auth, skip if google because google auto-verifies)
-        // Wait, onAuthStateChanged fires immediately. If email is not verified, we can log them out or block hydration.
-        // The prompt asks to enforce email verification. We'll enforce it during login instead.
-        const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
-        if (!userDoc.exists()) {
-          setHydrationState('NEEDS_ONBOARDING');
-          setCurrentUser(null);
-        } else {
-          const data = userDoc.data() as User;
-          setCurrentUser({ id: fbUser.uid, ...data });
-          
-          if (!data.collegeId || !data.friendCode || data.status === 'PENDING_ONBOARDING') {
-            setHydrationState('PENDING_MIGRATION');
+      try {
+        if (fbUser) {
+          // Enforce email verification (for password auth, skip if google because google auto-verifies)
+          // Wait, onAuthStateChanged fires immediately. If email is not verified, we can log them out or block hydration.
+          // The prompt asks to enforce email verification. We'll enforce it during login instead.
+          const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+          if (!userDoc.exists()) {
+            setHydrationState('NEEDS_ONBOARDING');
+            setCurrentUser(null);
           } else {
-            setHydrationState('ACTIVE');
-          }
-
-          // Fetch admin logs if admin
-          if (data.role === 'SUPER_ADMIN' || data.role === 'COLLEGE_ADMIN') {
-            let logQuery = query(collection(db, 'adminLogs'), orderBy('timestamp', 'desc'), limit(50));
-            if (data.role === 'COLLEGE_ADMIN') {
-              logQuery = query(collection(db, 'adminLogs'), where('collegeId', '==', data.collegeId), orderBy('timestamp', 'desc'), limit(50));
-            }
-            const unsubAdminLogs = onSnapshot(logQuery, s => setAdminLogs(s.docs.map(d => ({ id: d.id, ...d.data() } as AdminLog))));
+            const data = userDoc.data() as User;
+            setCurrentUser({ id: fbUser.uid, ...data });
             
-            // Clean up admin logs listener when auth state changes
-            return () => { unsubAuth(); unsubAdminLogs(); };
+            if (!data.collegeId || !data.friendCode || data.status === 'PENDING_ONBOARDING') {
+              setHydrationState('PENDING_MIGRATION');
+            } else {
+              setHydrationState('ACTIVE');
+            }
+
+            // Fetch admin logs if admin
+            if (data.role === 'SUPER_ADMIN' || data.role === 'COLLEGE_ADMIN') {
+              let logQuery = query(collection(db, 'adminLogs'), orderBy('timestamp', 'desc'), limit(50));
+              if (data.role === 'COLLEGE_ADMIN') {
+                logQuery = query(collection(db, 'adminLogs'), where('collegeId', '==', data.collegeId), orderBy('timestamp', 'desc'), limit(50));
+              }
+              if (unsubAdminLogs) unsubAdminLogs();
+              unsubAdminLogs = onSnapshot(logQuery, s => setAdminLogs(s.docs.map(d => ({ id: d.id, ...d.data() } as AdminLog))));
+            }
           }
+        } else {
+          setCurrentUser(null);
+          setHydrationState('ACTIVE');
         }
-      } else {
-        setCurrentUser(null);
-        setHydrationState('ACTIVE');
+      } catch (error) {
+        console.error("Auth State Hydration Error:", error);
+      } finally {
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     });
 
-    return () => { unsubAuth(); };
+    return () => { 
+      unsubAuth(); 
+      if (unsubAdminLogs) unsubAdminLogs();
+    };
   }, [fbReady]);
 
   // Global Data Listeners

@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "emulators": "firebase emulators:start",
     "test:rules": "firebase emulators:exec --only firestore \"npx vitest run tests/rules\"",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "bootstrap-admin": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
     "firebase": "^12.15.0",
