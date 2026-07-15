@@ -75,6 +75,7 @@ export const Communities: React.FC = () => {
         description: desc.trim(),
         type,
         college: type === 'college' ? cCollege.trim() : undefined,
+        collegeId: currentUser?.collegeId,
         createdBy: currentUser?.id || '',
         image: '',
       });
