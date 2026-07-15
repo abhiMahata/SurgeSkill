@@ -206,7 +206,7 @@ export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{new Date(p.createdAt).toLocaleString()}</div>
                       </div>
                     </div>
-                    {currentUser?.id === p.authorId && (
+                    {(currentUser?.id === p.authorId || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN') && (
                       <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(p.id)}>
                         <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--danger)' }}>delete</span>
                       </button>
@@ -243,6 +243,20 @@ export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }
                                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{cAuthor?.name || c.authorId}</div>
                                 <div style={{ fontSize: 14 }}>{c.content}</div>
                               </div>
+                              {(currentUser?.id === c.authorId || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN') && (
+                                <button className="btn btn-ghost btn-sm" onClick={async () => {
+                                  if (!window.confirm('Delete comment?')) return;
+                                  try {
+                                    const { doc, deleteDoc } = await import('firebase/firestore');
+                                    const { db } = await import('../../firebase');
+                                    await deleteDoc(doc(db, 'communities', communityId, 'posts', p.id, 'comments', c.id));
+                                  } catch (e) {
+                                    showToast('Failed to delete comment.');
+                                  }
+                                }}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
+                                </button>
+                              )}
                             </div>
                           );
                         })}

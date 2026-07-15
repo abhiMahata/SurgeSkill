@@ -96,12 +96,21 @@ service cloud.firestore {
                        request.resource.data.status in ['PENDING_ONBOARDING', 'ACTIVE'] &&
                        isEmailValidForCollege(request.resource.data.collegeId);
                        
-      // Updates cannot modify protected fields IF they already exist.
+      // Updates cannot modify protected fields IF they already exist, UNLESS it's an admin.
       // If collegeId is being newly initialized (legacy migration), validate it.
-      allow update: if isSelf(userId) && 
-                       !isModifyingProtectedUserFields() &&
-                       (!('collegeId' in resource.data) && 'collegeId' in request.resource.data ? isEmailValidForCollege(request.resource.data.collegeId) : true);
+      allow update: if (isSelf(userId) && 
+                        !isModifyingProtectedUserFields() &&
+                        (!('collegeId' in resource.data) && 'collegeId' in request.resource.data ? isEmailValidForCollege(request.resource.data.collegeId) : true)) ||
+                       (isSuperAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'status', 'updatedAt'])) ||
+                       (isCollegeAdmin(resource.data.collegeId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
       allow delete: if false; 
+    }
+
+    // ── Admin Logs ───────────────────────────────────────────────────────────
+    match /adminLogs/{logId} {
+      allow read: if isAuth() && (isSuperAdmin() || isCollegeAdmin(resource.data.collegeId));
+      allow create: if isAuth() && (isSuperAdmin() || isCollegeAdmin(request.resource.data.collegeId)) && request.resource.data.actorId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // ── Events ──────────────────────────────────────────────────────────────
@@ -149,8 +158,8 @@ service cloud.firestore {
           request.resource.data.authorId == request.auth.uid &&
           request.resource.data.communityId == communityId &&
           request.resource.data.collegeId == getCommunityCollegeId(communityId);
-        allow update: if isAuth() && isSelf(resource.data.authorId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'attachments', 'updatedAt']);
+        allow update: if (isAuth() && isSelf(resource.data.authorId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'attachments', 'updatedAt'])) ||
+                         (isAuth() && isCollegeAdmin(resource.data.collegeId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
         allow delete: if isAuth() && (isSelf(resource.data.authorId) || isCollegeAdmin(resource.data.collegeId));
         
         match /comments/{commentId} {
@@ -158,8 +167,8 @@ service cloud.firestore {
           allow create: if isAuth() && 
             isActiveMember(communityId, request.auth.uid) &&
             request.resource.data.authorId == request.auth.uid;
-          allow update: if isAuth() && isSelf(resource.data.authorId) &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'updatedAt']);
+          allow update: if (isAuth() && isSelf(resource.data.authorId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'updatedAt'])) ||
+                           (isAuth() && isCollegeAdmin(resource.data.collegeId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
           allow delete: if isAuth() && (isSelf(resource.data.authorId) || isCollegeAdmin(resource.data.collegeId));
         }
 

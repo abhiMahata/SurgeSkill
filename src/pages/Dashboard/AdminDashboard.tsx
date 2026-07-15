@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import type { AppEvent, Hackathon, Course, ActivityLog, Community } from '../../types';
+import type { AppEvent, Hackathon, Course, ActivityLog, Community, AppUser, AdminLog } from '../../types';
+import { collection, getDocs, query, where, limit } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 const statusBadge = (s: string) => {
   const m: Record<string, string> = {
@@ -14,9 +16,23 @@ const statusBadge = (s: string) => {
 };
 
 export const AdminDashboard: React.FC = () => {
-  const { currentUser, events, hackathons, courses, communities, activities, deleteCommunity, showToast, memberCounts } = useApp() as any;
+  const { currentUser, events, hackathons, courses, communities, activities, deleteCommunity, showToast, memberCounts, moderateUser, adminLogs, suspendMember, restoreMember } = useApp() as any;
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState<'overview' | 'communities' | 'events' | 'activity'>('overview');
+  const [activeSection, setActiveSection] = useState<'overview' | 'users' | 'communities' | 'events' | 'audit'>('overview');
+  const [usersList, setUsersList] = useState<AppUser[]>([]);
+
+  useEffect(() => {
+    if (!currentUser || (currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'COLLEGE_ADMIN')) return;
+    const fetchUsers = async () => {
+      let q = query(collection(db, 'users'), limit(200));
+      if (currentUser.role === 'COLLEGE_ADMIN') {
+        q = query(collection(db, 'users'), where('collegeId', '==', currentUser.collegeId), limit(200));
+      }
+      const snap = await getDocs(q);
+      setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
+    };
+    fetchUsers();
+  }, [currentUser]);
 
   const totalEventRegs   = events.reduce((s: number, e: AppEvent)     => s + e.registrationCount, 0);
   const totalHackRegs    = hackathons.reduce((s: number, h: Hackathon)  => s + h.registrationsCount, 0);
@@ -39,9 +55,10 @@ export const AdminDashboard: React.FC = () => {
 
   const tabs = [
     { key: 'overview',     label: 'Overview',     icon: 'dashboard' },
+    { key: 'users',        label: 'Users',        icon: 'group' },
     { key: 'communities',  label: 'Communities',   icon: 'groups' },
-    { key: 'events',       label: 'Events',        icon: 'event' },
-    { key: 'activity',     label: 'Activity Log',  icon: 'history' },
+    { key: 'events',       label: 'Content',      icon: 'post_add' },
+    { key: 'audit',        label: 'Audit Logs',   icon: 'history' },
   ] as const;
 
   return (
@@ -175,6 +192,54 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* ── USERS ─────────────────────────────────────────────────── */}
+      {activeSection === 'users' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>{usersList.length} users in scope</div>
+          </div>
+          <div className="card">
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead><tr>{['User', 'Role', 'Status', 'Actions'].map(h => <th key={h}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {usersList.map(u => (
+                    <tr key={u.id}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {u.avatarUrl ? <img src={u.avatarUrl} style={{ width: 28, height: 28, borderRadius: '50%' }} /> : <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--border)' }} />}
+                          <div>
+                            <div style={{ fontWeight: 500, fontSize: 13 }}>{u.displayName}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td><span className="badge badge-gray">{u.role}</span></td>
+                      <td><span className={u.status === 'ACTIVE' ? 'badge badge-green' : 'badge badge-red'}>{u.status}</span></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {u.status === 'ACTIVE' ? (
+                            <button className="btn btn-ghost btn-sm" onClick={() => moderateUser(u.id, { status: 'SUSPENDED' })} style={{ color: 'var(--red)' }}>Suspend</button>
+                          ) : (
+                            <button className="btn btn-ghost btn-sm" onClick={() => moderateUser(u.id, { status: 'ACTIVE' })} style={{ color: 'var(--green)' }}>Restore</button>
+                          )}
+                          {currentUser.role === 'SUPER_ADMIN' && u.role === 'STUDENT' && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => moderateUser(u.id, { role: 'COLLEGE_ADMIN' })}>Make Admin</button>
+                          )}
+                          {currentUser.role === 'SUPER_ADMIN' && u.role === 'COLLEGE_ADMIN' && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => moderateUser(u.id, { role: 'STUDENT' })}>Revoke Admin</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── COMMUNITIES ──────────────────────────────────────────── */}
       {activeSection === 'communities' && (
         <div>
@@ -187,7 +252,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div className="card">
             <table className="data-table">
-              <thead><tr>{['Community', 'Type', 'Members', 'Actions'].map(h => <th key={h}>{h}</th>)}</tr></thead>
+              <thead><tr>{['Community', 'Type', 'Status', 'Members', 'Actions'].map(h => <th key={h}>{h}</th>)}</tr></thead>
               <tbody>
                 {communities.map((c: Community) => (
                   <tr key={c.id}>
@@ -209,10 +274,17 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </td>
                     <td><span className={`badge ${c.type === 'college' ? 'badge-blue' : 'badge-green'}`}>{c.type}</span></td>
+                    <td><span className={statusBadge(c.status || 'Active')}>{c.status || 'Active'}</span></td>
                     <td style={{ fontWeight: 600 }}>{memberCounts[c.id] || 0}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/communities/${c.id}`)}>Open</button>
+                        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--amber)' }} onClick={() => moderateContent(['communities', c.id], { status: c.status === 'Suspended' ? 'Active' : 'Suspended' })}>
+                          {c.status === 'Suspended' ? 'Unsuspend' : 'Suspend'}
+                        </button>
+                        {currentUser.role === 'SUPER_ADMIN' && (
+                          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => deleteCommunity(c.id)}>Delete</button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -268,25 +340,30 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* ── ACTIVITY LOG ─────────────────────────────────────────── */}
-      {activeSection === 'activity' && (
+      {/* ── AUDIT LOGS ─────────────────────────────────────────── */}
+      {activeSection === 'audit' && (
         <div className="card">
           <div className="card-header">
-            <div className="card-title">Platform Activity</div>
-            <div className="card-subtitle">Recent actions across the platform</div>
+            <div className="card-title">Audit Logs</div>
+            <div className="card-subtitle">Recent administrative actions</div>
           </div>
-          {activities.length === 0 ? (
+          {adminLogs.length === 0 ? (
             <div className="empty-state" style={{ padding: 32 }}>
-              <div className="empty-desc">No activity recorded yet.</div>
+              <div className="empty-desc">No audit logs recorded yet.</div>
             </div>
           ) : (
             <div style={{ maxHeight: 600, overflowY: 'auto' }}>
-              {activities.map((log: ActivityLog, i: number) => (
-                <div key={i} style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--blue)', marginTop: 6, flexShrink: 0 }} />
+              {adminLogs.map((log: AdminLog) => (
+                <div key={log.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--primary)', marginTop: 6, flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 }}>{log.action}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{log.date} · {log.timestamp}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                      <span style={{ fontWeight: 600 }}>{log.action}</span> on <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{log.targetId}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{log.details}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      {new Date(log.timestamp).toLocaleString()} · by {log.actorId}
+                    </div>
                   </div>
                 </div>
               ))}

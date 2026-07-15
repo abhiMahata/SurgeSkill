@@ -271,6 +271,16 @@ export interface AppNotification {
 
 export const MAX_NOTIFICATION_BATCH_SIZE = 500;
 
+export interface AdminLog {
+  id: string;
+  actorId: string;
+  targetId: string;
+  collegeId: string;
+  action: string;
+  details: string;
+  timestamp: number;
+}
+
 export interface PostLike {
   id: string; // userId
   userId: string;

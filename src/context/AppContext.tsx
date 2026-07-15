@@ -12,7 +12,7 @@ import { auth, db, googleProvider } from '../firebase';
 import type {
   User, AppUser, UserRole, Hackathon, Course, ActivityLog, Community, ChatMessage, TypingUser, AppCommunityMember,
   FriendRequest, Friendship, Block, Conversation, ConversationMessage, StorageMetadata, AppEvent, EventRegistration, GlobalSearchResults, Post,
-  AppNotification, NotificationType
+  AppNotification, NotificationType, AdminLog
 } from '../types';
 import { MAX_NOTIFICATION_BATCH_SIZE } from '../types';
 import { hashPassword, verifyPassword } from '../utils/auth';
@@ -64,6 +64,12 @@ interface AppContextType {
   memberCounts: Record<string, number>;
   suspendMember: (communityId: string, userId: string) => Promise<void>;
   restoreMember: (communityId: string, userId: string) => Promise<void>;
+
+  // Admin
+  adminLogs: AdminLog[];
+  logAdminAction: (action: string, targetId: string, details: string) => Promise<void>;
+  moderateUser: (userId: string, updates: Partial<User>) => Promise<void>;
+  moderateContent: (pathSegments: string[], updates: any) => Promise<void>;
   
   // Friends
   friendRequests: FriendRequest[];
@@ -132,6 +138,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [blocks, setBlocks]                   = useState<Block[]>([]);
   const [conversations, setConversations]     = useState<Conversation[]>([]);
   const [notifications, setNotifications]     = useState<AppNotification[]>([]);
+  const [adminLogs, setAdminLogs]             = useState<AdminLog[]>([]);
   
   const typingTimerRef                        = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -216,6 +223,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } else {
             setHydrationState('ACTIVE');
           }
+
+          // Fetch admin logs if admin
+          if (data.role === 'SUPER_ADMIN' || data.role === 'COLLEGE_ADMIN') {
+            let logQuery = query(collection(db, 'adminLogs'), orderBy('timestamp', 'desc'), limit(50));
+            if (data.role === 'COLLEGE_ADMIN') {
+              logQuery = query(collection(db, 'adminLogs'), where('collegeId', '==', data.collegeId), orderBy('timestamp', 'desc'), limit(50));
+            }
+            unsubs.push(onSnapshot(logQuery, s => setAdminLogs(s.docs.map(d => ({ id: d.id, ...d.data() } as AdminLog)))));
+          }
         }
       } else {
         setCurrentUser(null);
@@ -229,40 +245,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Fetch myMemberships when communities or currentUser changes
   useEffect(() => {
-    if (!fbReady || !currentUser || !currentUser.collegeId) return;
+    if (!fbReady || !currentUser || !currentUser.collegeId || hydrationState !== 'ACTIVE') return;
     const fetchMemberships = async () => {
       const mems: Record<string, AppCommunityMember> = {};
-      await Promise.all(communities.map(async (c) => {
+      const authorizedCommunities = communities.filter(c => c.collegeId === currentUser.collegeId || currentUser.role === 'SUPER_ADMIN');
+      await Promise.all(authorizedCommunities.map(async (c) => {
         try {
           const snap = await getDoc(doc(db, 'communities', c.id, 'members', currentUser.id));
           if (snap.exists()) {
              mems[c.id] = snap.data() as AppCommunityMember;
           }
-        } catch (e) {}
+        } catch (e: any) {
+          console.warn(`[Initialization] Failed to fetch membership for community ${c.id}. Reason: ${e.message}`);
+        }
       }));
       setMyMemberships(mems);
     };
     if (communities.length > 0) fetchMemberships();
-  }, [communities.length, currentUser?.id, fbReady]);
+  }, [communities.length, currentUser, fbReady, hydrationState]);
 
   // Fetch memberCounts for all communities
   useEffect(() => {
-    if (!fbReady || communities.length === 0) return;
+    if (!fbReady || communities.length === 0 || hydrationState !== 'ACTIVE' || !currentUser) return;
     const fetchCounts = async () => {
       const counts: Record<string, number> = {};
-      await Promise.all(communities.map(async (c) => {
+      const authorizedCommunities = communities.filter(c => c.collegeId === currentUser.collegeId || currentUser.role === 'SUPER_ADMIN');
+      await Promise.all(authorizedCommunities.map(async (c) => {
         try {
           const q = query(collection(db, 'communities', c.id, 'members'), where('status', '==', 'ACTIVE'));
           const snapshot = await getCountFromServer(q);
           counts[c.id] = snapshot.data().count;
-        } catch (e) {
+        } catch (e: any) {
+          console.warn(`[Initialization] Failed to fetch member count for community ${c.id}. Reason: ${e.message}`);
           counts[c.id] = 0;
         }
       }));
       setMemberCounts(counts);
     };
     fetchCounts();
-  }, [communities.length, fbReady]);
+  }, [communities.length, fbReady, hydrationState, currentUser]);
 
   // ── Friends Listeners ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -1087,6 +1108,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {}
   };
 
+  // ── Admin ───────────────────────────────────────────────────────────────
+
+  const logAdminAction = async (action: string, targetId: string, details: string) => {
+    if (!fbReady || !currentUser) return;
+    try {
+      const { collection, addDoc } = await import('firebase/firestore');
+      await addDoc(collection(db, 'adminLogs'), {
+        actorId: currentUser.id,
+        targetId,
+        collegeId: currentUser.collegeId,
+        action,
+        details,
+        timestamp: Date.now()
+      });
+    } catch (e) {
+      console.error('Failed to log admin action', e);
+    }
+  };
+
+  const moderateUser = async (userId: string, updates: Partial<User>) => {
+    if (!fbReady || !currentUser) return;
+    if (currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'COLLEGE_ADMIN') return;
+    
+    // Only SUPER_ADMIN can update roles.
+    if (updates.role && currentUser.role !== 'SUPER_ADMIN') {
+      showToast('Insufficient permissions to modify role.');
+      return;
+    }
+    
+    try {
+      await updateDoc(doc(db, 'users', userId), { ...updates, updatedAt: Date.now() });
+      await logAdminAction('MODERATE_USER', userId, `Updated fields: ${Object.keys(updates).join(', ')}`);
+      showToast('User updated successfully.');
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to moderate user.');
+    }
+  };
+
+  const moderateContent = async (pathSegments: string[], updates: any) => {
+    if (!fbReady || !currentUser) return;
+    if (currentUser.role !== 'SUPER_ADMIN' && currentUser.role !== 'COLLEGE_ADMIN') return;
+    
+    try {
+      const docRef = doc(db, pathSegments[0], ...pathSegments.slice(1));
+      await updateDoc(docRef, { ...updates, updatedAt: Date.now() });
+      await logAdminAction('MODERATE_CONTENT', pathSegments[pathSegments.length - 1], `Updated content in ${pathSegments.join('/')}`);
+      showToast('Content moderated successfully.');
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to moderate content.');
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, authLoading, hydrationState, pendingGoogleUser,
@@ -1103,6 +1178,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notifications, markNotificationRead, markAllNotificationsRead, notifyUser, parseMentions,
       theme, setTheme: setThemeState, toast, showToast,
       typingUsers, setTyping, subscribeTyping,
+      adminLogs, logAdminAction, moderateUser, moderateContent
     }}>
       {children}
     </AppContext.Provider>
