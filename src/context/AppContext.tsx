@@ -6,7 +6,7 @@ import {
 } from 'firebase/auth';
 import {
   doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs, collectionGroup,
-  addDoc, deleteDoc, query, orderBy, limit, increment, serverTimestamp, getCountFromServer, where
+  addDoc, deleteDoc, query, orderBy, limit, increment, serverTimestamp, getCountFromServer, where, or, and
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import type {
@@ -217,7 +217,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (data.role === 'COLLEGE_ADMIN') {
               logQuery = query(collection(db, 'adminLogs'), where('collegeId', '==', data.collegeId), orderBy('timestamp', 'desc'), limit(50));
             }
-            unsubs.push(onSnapshot(logQuery, s => setAdminLogs(s.docs.map(d => ({ id: d.id, ...d.data() } as AdminLog)))));
+            const unsubAdminLogs = onSnapshot(logQuery, s => setAdminLogs(s.docs.map(d => ({ id: d.id, ...d.data() } as AdminLog))));
+            
+            // Clean up admin logs listener when auth state changes
+            return () => { unsubAuth(); unsubAdminLogs(); };
           }
         }
       } else {
@@ -235,15 +238,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!fbReady || hydrationState !== 'ACTIVE' || !currentUser) return;
     
     const unsubs: (() => void)[] = [];
-    unsubs.push(onSnapshot(collection(db, 'events'), s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as AppEvent)))));
-    unsubs.push(onSnapshot(query(collection(db, 'eventRegistrations'), where('userId', '==', currentUser.id)), s => {
-      setMyEventRegistrations(s.docs.map(d => d.data().eventId));
-    }));
-    unsubs.push(onSnapshot(collection(db, 'hackathons'), s => setHackathons(s.docs.map(d => ({ id: d.id, ...d.data() } as Hackathon)))));
-    unsubs.push(onSnapshot(collection(db, 'courses'), s => setCourses(s.docs.map(d => ({ id: d.id, ...d.data() } as Course)))));
-    unsubs.push(onSnapshot(collection(db, 'communities'), s => setCommunities(s.docs.map(d => ({ id: d.id, ...d.data() } as Community)))));
-    unsubs.push(onSnapshot(query(collection(db, 'activities'), orderBy('ts', 'desc'), limit(50)), s =>
-      setActivities(s.docs.map(d => d.data() as ActivityLog))));
+    unsubs.push(onSnapshot(
+      query(collection(db, 'events'), where('collegeId', '==', currentUser.collegeId)), 
+      s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as AppEvent))),
+      error => console.error("[Listener Failure]", "events", error.code, error.message)
+    ));
+    unsubs.push(onSnapshot(
+      query(collection(db, 'eventRegistrations'), where('collegeId', '==', currentUser.collegeId), where('userId', '==', currentUser.id)), 
+      s => setMyEventRegistrations(s.docs.map(d => d.data().eventId)),
+      error => console.error("[Listener Failure]", "eventRegistrations", error.code, error.message)
+    ));
+    unsubs.push(onSnapshot(
+      query(collection(db, 'communities'), where('collegeId', '==', currentUser.collegeId)), 
+      s => setCommunities(s.docs.map(d => ({ id: d.id, ...d.data() } as Community))),
+      error => console.error("[Listener Failure]", "communities", error.code, error.message)
+    ));
 
     return () => unsubs.forEach(u => u());
   }, [fbReady, hydrationState, currentUser]);
@@ -295,29 +304,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!fbReady || !currentUser || hydrationState !== 'ACTIVE') return;
     const unsubs: (() => void)[] = [];
     
-    unsubs.push(onSnapshot(collection(db, 'friendRequests'), s => {
-      const all = s.docs.map(d => ({ id: d.id, ...d.data() } as FriendRequest));
-      setFriendRequests(all.filter(r => r.senderId === currentUser.id || r.receiverId === currentUser.id));
-    }));
+    unsubs.push(onSnapshot(
+      query(collection(db, 'friendRequests'), or(where('senderId', '==', currentUser.id), where('receiverId', '==', currentUser.id))), 
+      s => {
+        const all = s.docs.map(d => ({ id: d.id, ...d.data() } as FriendRequest));
+        setFriendRequests(all);
+      }, error => console.error("[Listener Failure]", "friendRequests", error.code, error.message)
+    ));
     
-    unsubs.push(onSnapshot(collection(db, 'friendships'), s => {
-      const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Friendship));
-      setFriendships(all.filter(f => f.userIds.includes(currentUser.id)));
-    }));
+    unsubs.push(onSnapshot(
+      query(collection(db, 'friendships'), where('userIds', 'array-contains', currentUser.id)), 
+      s => {
+        const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Friendship));
+        setFriendships(all);
+      }, error => console.error("[Listener Failure]", "friendships", error.code, error.message)
+    ));
     
-    unsubs.push(onSnapshot(collection(db, 'blocks'), s => {
-      const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Block));
-      setBlocks(all.filter(b => b.userIds.includes(currentUser.id)));
-    }));
+    unsubs.push(onSnapshot(
+      query(collection(db, 'blocks'), where('userIds', 'array-contains', currentUser.id)), 
+      s => {
+        const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Block));
+        setBlocks(all);
+      }, error => console.error("[Listener Failure]", "blocks", error.code, error.message)
+    ));
 
-    unsubs.push(onSnapshot(collection(db, 'conversations'), s => {
-      const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
-      setConversations(all.filter(c => c.participantIds.includes(currentUser.id)).sort((a, b) => b.lastMessageAt - a.lastMessageAt));
-    }));
+    unsubs.push(onSnapshot(
+      query(collection(db, 'conversations'), where('participantIds', 'array-contains', currentUser.id)), 
+      s => {
+        const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
+        setConversations(all.sort((a, b) => b.lastMessageAt - a.lastMessageAt));
+      }, error => console.error("[Listener Failure]", "conversations", error.code, error.message)
+    ));
 
     unsubs.push(onSnapshot(
       query(collection(db, 'notifications'), where('recipientId', '==', currentUser.id), orderBy('createdAt', 'desc'), limit(50)),
-      s => setNotifications(s.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification)))
+      s => setNotifications(s.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification))),
+      error => console.error("[Listener Failure]", "notifications", error.code, error.message)
     ));
 
     return () => unsubs.forEach(u => u());

@@ -61,8 +61,12 @@ export const OnboardingWizard: React.FC<{ isMigration?: boolean }> = ({ isMigrat
           setCollegeIdOptions(options);
           if (options.length === 1) setSelectedCollegeId(options[0].id);
         }
-      } catch (err) {
-        setDomainError('Error verifying college domain.');
+      } catch (error: any) {
+        console.error("[CollegeDomain]", error);
+        console.error(error.code);
+        console.error(error.message);
+        console.error(error.stack);
+        setDomainError(`Error verifying college domain: ${error.message}`);
       }
       setResolvingDomain(false);
     };
