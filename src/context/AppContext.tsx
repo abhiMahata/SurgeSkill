@@ -241,17 +241,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     unsubs.push(onSnapshot(
       query(collection(db, 'events'), where('collegeId', '==', currentUser.collegeId)), 
       s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as AppEvent))),
-      error => console.error("[Listener Failure]", "events", error.code, error.message)
+      error => console.error(`[Listener Failure]\nCollection: events\nQuery: query(collection(db, 'events'), where('collegeId', '==', currentUser.collegeId))\nFirebase error code: ${error.code}\nFirebase error message: ${error.message}`)
     ));
     unsubs.push(onSnapshot(
       query(collection(db, 'eventRegistrations'), where('collegeId', '==', currentUser.collegeId), where('userId', '==', currentUser.id)), 
       s => setMyEventRegistrations(s.docs.map(d => d.data().eventId)),
-      error => console.error("[Listener Failure]", "eventRegistrations", error.code, error.message)
+      error => console.error(`[Listener Failure]\nCollection: eventRegistrations\nQuery: query(collection(db, 'eventRegistrations'), where('collegeId', '==', currentUser.collegeId), where('userId', '==', currentUser.id))\nFirebase error code: ${error.code}\nFirebase error message: ${error.message}`)
     ));
     unsubs.push(onSnapshot(
       query(collection(db, 'communities'), where('collegeId', '==', currentUser.collegeId)), 
       s => setCommunities(s.docs.map(d => ({ id: d.id, ...d.data() } as Community))),
-      error => console.error("[Listener Failure]", "communities", error.code, error.message)
+      error => console.error(`[Listener Failure]\nCollection: communities\nQuery: query(collection(db, 'communities'), where('collegeId', '==', currentUser.collegeId))\nFirebase error code: ${error.code}\nFirebase error message: ${error.message}`)
     ));
 
     return () => unsubs.forEach(u => u());
@@ -309,7 +309,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       s => {
         const all = s.docs.map(d => ({ id: d.id, ...d.data() } as FriendRequest));
         setFriendRequests(all);
-      }, error => console.error("[Listener Failure]", "friendRequests", error.code, error.message)
+      }, error => console.error(`[Listener Failure]\nCollection: friendRequests\nQuery: query(collection(db, 'friendRequests'), or(where('senderId', '==', currentUser.id), where('receiverId', '==', currentUser.id)))\nFirebase error code: ${error.code}\nFirebase error message: ${error.message}`)
     ));
     
     unsubs.push(onSnapshot(
@@ -317,7 +317,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       s => {
         const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Friendship));
         setFriendships(all);
-      }, error => console.error("[Listener Failure]", "friendships", error.code, error.message)
+      }, error => console.error(`[Listener Failure]\nCollection: friendships\nQuery: query(collection(db, 'friendships'), where('userIds', 'array-contains', currentUser.id))\nFirebase error code: ${error.code}\nFirebase error message: ${error.message}`)
     ));
     
     unsubs.push(onSnapshot(
@@ -325,7 +325,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       s => {
         const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Block));
         setBlocks(all);
-      }, error => console.error("[Listener Failure]", "blocks", error.code, error.message)
+      }, error => console.error(`[Listener Failure]\nCollection: blocks\nQuery: query(collection(db, 'blocks'), where('userIds', 'array-contains', currentUser.id))\nFirebase error code: ${error.code}\nFirebase error message: ${error.message}`)
     ));
 
     unsubs.push(onSnapshot(
@@ -333,13 +333,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       s => {
         const all = s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
         setConversations(all.sort((a, b) => b.lastMessageAt - a.lastMessageAt));
-      }, error => console.error("[Listener Failure]", "conversations", error.code, error.message)
+      }, error => console.error(`[Listener Failure]\nCollection: conversations\nQuery: query(collection(db, 'conversations'), where('participantIds', 'array-contains', currentUser.id))\nFirebase error code: ${error.code}\nFirebase error message: ${error.message}`)
     ));
 
     unsubs.push(onSnapshot(
       query(collection(db, 'notifications'), where('recipientId', '==', currentUser.id), orderBy('createdAt', 'desc'), limit(50)),
       s => setNotifications(s.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification))),
-      error => console.error("[Listener Failure]", "notifications", error.code, error.message)
+      error => console.error(`[Listener Failure]\nCollection: notifications\nQuery: query(collection(db, 'notifications'), where('recipientId', '==', currentUser.id), orderBy('createdAt', 'desc'), limit(50))\nFirebase error code: ${error.code}\nFirebase error message: ${error.message}`)
     ));
 
     return () => unsubs.forEach(u => u());
