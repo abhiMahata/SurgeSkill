@@ -5,36 +5,31 @@ import { collection, query, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDo
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Post, Comment, AppUser } from '../../types';
 
-export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }) => {
+const PostComments: React.FC<{
+  postId: string;
+  communityId: string;
+  postAuthorId: string;
+  profiles: Record<string, AppUser>;
+  setProfiles: React.Dispatch<React.SetStateAction<Record<string, AppUser>>>;
+}> = ({ postId, communityId, postAuthorId, profiles, setProfiles }) => {
   const { currentUser, showToast, notifyUser, parseMentions } = useApp();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [content, setContent] = useState('');
-  const [sending, setSending] = useState(false);
-  const [profiles, setProfiles] = useState<Record<string, AppUser>>({});
-
-  // Comments state
-  const [comments, setComments] = useState<Record<string, Comment[]>>({});
-  const [commentInput, setCommentInput] = useState<Record<string, string>>({});
-  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentInput, setCommentInput] = useState('');
 
   useEffect(() => {
-    if (!communityId) return;
-    const q = query(collection(db, 'communities', communityId, 'posts'));
+    const q = query(collection(db, 'communities', communityId, 'posts', postId, 'comments'));
     const unsub = onSnapshot(q, snap => {
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() } as Post));
-      all.sort((a, b) => b.createdAt - a.createdAt);
-      setPosts(all);
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() } as Comment));
+      all.sort((a, b) => a.createdAt - b.createdAt);
+      setComments(all);
     });
     return () => unsub();
-  }, [communityId]);
+  }, [communityId, postId]);
 
-  // Fetch author profiles
   useEffect(() => {
     const fetchProfiles = async () => {
       const needed = new Set<string>();
-      posts.forEach(p => { if (!profiles[p.authorId]) needed.add(p.authorId); });
-      Object.values(comments).flat().forEach(c => { if (!profiles[c.authorId]) needed.add(c.authorId); });
-      
+      comments.forEach(c => { if (!profiles[c.authorId]) needed.add(c.authorId); });
       if (needed.size === 0) return;
       const next = { ...profiles };
       for (const id of needed) {
@@ -46,24 +41,84 @@ export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }
       setProfiles(next);
     };
     fetchProfiles();
-  }, [posts, comments, profiles]);
+  }, [comments]); // depend on comments, use functional update for setProfiles if needed, but this is fine
 
-  // Comments listener
-  useEffect(() => {
-    if (!communityId) return;
-    const unsubs: (() => void)[] = [];
-    Object.keys(expandedComments).forEach(postId => {
-      if (expandedComments[postId]) {
-        const q = query(collection(db, 'communities', communityId, 'posts', postId, 'comments'));
-        unsubs.push(onSnapshot(q, snap => {
-          const all = snap.docs.map(d => ({ id: d.id, ...d.data() } as Comment));
-          all.sort((a, b) => a.createdAt - b.createdAt);
-          setComments(prev => ({ ...prev, [postId]: all }));
-        }));
+  const handleAddComment = async () => {
+    if (!currentUser || !commentInput.trim()) return;
+    try {
+      const { collection, addDoc } = await import('firebase/firestore');
+      await addDoc(collection(db, 'communities', communityId, 'posts', postId, 'comments'), {
+        collegeId: currentUser.collegeId,
+        communityId,
+        postId,
+        authorId: currentUser.id,
+        content: commentInput.trim(),
+        status: 'ACTIVE',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+      if (postAuthorId !== currentUser.id) {
+        await notifyUser(postAuthorId, 'POST_COMMENT', 'post', postId, `${currentUser.displayName} commented on your post.`);
       }
-    });
-    return () => unsubs.forEach(u => u());
-  }, [communityId, expandedComments]);
+      await parseMentions(commentInput.trim(), 'post', postId);
+      setCommentInput('');
+    } catch (e) {
+      showToast('Failed to add comment.');
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--border)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+        {comments.map(c => {
+          const cAuthor = profiles[c.authorId];
+          return (
+            <div key={c.id} style={{ display: 'flex', gap: 12 }}>
+              <img src={cAuthor?.photoURL || 'https://via.placeholder.com/32'} style={{ width: 32, height: 32, borderRadius: '50%' }} />
+              <div style={{ flex: 1, background: 'var(--bg)', padding: '8px 12px', borderRadius: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{cAuthor?.name || c.authorId}</div>
+                <div style={{ fontSize: 14 }}>{c.content}</div>
+              </div>
+              {(currentUser?.id === c.authorId || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN') && (
+                <button className="btn btn-ghost btn-sm" onClick={async () => {
+                  if (!window.confirm('Delete comment?')) return;
+                  try {
+                    const { doc, deleteDoc } = await import('firebase/firestore');
+                    await deleteDoc(doc(db, 'communities', communityId, 'posts', postId, 'comments', c.id));
+                  } catch (e) {
+                    showToast('Failed to delete comment.');
+                  }
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <img src={currentUser?.photoURL || 'https://via.placeholder.com/32'} style={{ width: 32, height: 32, borderRadius: '50%' }} />
+        <input 
+          type="text" value={commentInput} 
+          onChange={e => setCommentInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleAddComment(); }}
+          placeholder="Write a comment..." 
+          style={{ flex: 1, padding: '8px 12px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', outline: 'none' }}
+        />
+      </div>
+    </div>
+  );
+};
+
+export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }) => {
+  const { currentUser, showToast, notifyUser, parseMentions } = useApp();
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [content, setContent] = useState('');
+  const [sending, setSending] = useState(false);
+  const [profiles, setProfiles] = useState<Record<string, AppUser>>({});
+
+  // Removed legacy comments listener to prevent listener churn.
+  // Comments are now managed by PostComments component per post.
 
   const handleCreatePost = async (e: React.FormEvent, file?: File) => {
     e?.preventDefault();
@@ -137,31 +192,7 @@ export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }
     }
   };
 
-  const handleAddComment = async (postId: string) => {
-    const text = commentInput[postId];
-    if (!currentUser || !text?.trim()) return;
-    try {
-      const { collection, addDoc } = await import('firebase/firestore');
-      await addDoc(collection(db, 'communities', communityId, 'posts', postId, 'comments'), {
-        collegeId: currentUser.collegeId,
-        communityId,
-        postId,
-        authorId: currentUser.id,
-        content: text.trim(),
-        status: 'ACTIVE',
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
-      const p = posts.find(x => x.id === postId);
-      if (p && p.authorId !== currentUser.id) {
-        await notifyUser(p.authorId, 'POST_COMMENT', 'post', postId, `${currentUser.displayName} commented on your post.`);
-      }
-      await parseMentions(text.trim(), 'post', postId);
-      setCommentInput(prev => ({ ...prev, [postId]: '' }));
-    } catch (e) {
-      showToast('Failed to add comment.');
-    }
-  };
+  // Add comment moved to PostComments
 
   return (
     <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
@@ -232,46 +263,13 @@ export const CommunityFeed: React.FC<{ communityId: string }> = ({ communityId }
 
                   {/* Comments Section */}
                   {expandedComments[p.id] && (
-                    <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--border)' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-                        {(comments[p.id] || []).map(c => {
-                          const cAuthor = profiles[c.authorId];
-                          return (
-                            <div key={c.id} style={{ display: 'flex', gap: 12 }}>
-                              <img src={cAuthor?.photoURL || 'https://via.placeholder.com/32'} style={{ width: 32, height: 32, borderRadius: '50%' }} />
-                              <div style={{ flex: 1, background: 'var(--bg)', padding: '8px 12px', borderRadius: 8 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{cAuthor?.name || c.authorId}</div>
-                                <div style={{ fontSize: 14 }}>{c.content}</div>
-                              </div>
-                              {(currentUser?.id === c.authorId || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COLLEGE_ADMIN') && (
-                                <button className="btn btn-ghost btn-sm" onClick={async () => {
-                                  if (!window.confirm('Delete comment?')) return;
-                                  try {
-                                    const { doc, deleteDoc } = await import('firebase/firestore');
-                                    const { db } = await import('../../firebase');
-                                    await deleteDoc(doc(db, 'communities', communityId, 'posts', p.id, 'comments', c.id));
-                                  } catch (e) {
-                                    showToast('Failed to delete comment.');
-                                  }
-                                }}>
-                                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <img src={currentUser?.photoURL || 'https://via.placeholder.com/32'} style={{ width: 32, height: 32, borderRadius: '50%' }} />
-                        <input 
-                          type="text" value={commentInput[p.id] || ''} 
-                          onChange={e => setCommentInput(prev => ({ ...prev, [p.id]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') handleAddComment(p.id); }}
-                          placeholder="Write a comment..." 
-                          style={{ flex: 1, padding: '8px 12px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', outline: 'none' }}
-                        />
-                      </div>
-                    </div>
+                    <PostComments 
+                      postId={p.id} 
+                      communityId={communityId} 
+                      postAuthorId={p.authorId} 
+                      profiles={profiles} 
+                      setProfiles={setProfiles} 
+                    />
                   )}
 
                 </div>

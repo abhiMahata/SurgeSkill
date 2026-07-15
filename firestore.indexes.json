@@ -31,6 +31,54 @@
         { "fieldPath": "participantIds", "arrayConfig": "CONTAINS" },
         { "fieldPath": "lastMessageAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "adminLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "content", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "communities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "displayName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collegeId", "order": "ASCENDING" },
+        { "fieldPath": "title", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
