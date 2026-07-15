@@ -190,19 +190,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const unsubs: (() => void)[] = [];
-    unsubs.push(onSnapshot(collection(db, 'events'),      s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as AppEvent)))));
-    if (auth.currentUser) {
-      unsubs.push(onSnapshot(query(collection(db, 'eventRegistrations'), where('userId', '==', auth.currentUser.uid)), s => {
-        setMyEventRegistrations(s.docs.map(d => d.data().eventId));
-      }));
-    }
-    unsubs.push(onSnapshot(collection(db, 'hackathons'),  s => setHackathons(s.docs.map(d => ({ id: d.id, ...d.data() } as Hackathon)))));
-    unsubs.push(onSnapshot(collection(db, 'courses'),     s => setCourses(s.docs.map(d => ({ id: d.id, ...d.data() } as Course)))));
-    unsubs.push(onSnapshot(collection(db, 'communities'), s => setCommunities(s.docs.map(d => ({ id: d.id, ...d.data() } as Community)))));
-    unsubs.push(onSnapshot(query(collection(db, 'activities'), orderBy('ts', 'desc'), limit(50)), s =>
-      setActivities(s.docs.map(d => d.data() as ActivityLog))));
-
     // We do NOT use onAuthStateChanged for fetching memberships directly here because we need communities array first.
 
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
@@ -240,8 +227,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAuthLoading(false);
     });
 
-    return () => { unsubAuth(); unsubs.forEach(u => u()); };
+    return () => { unsubAuth(); };
   }, [fbReady]);
+
+  // Global Data Listeners
+  useEffect(() => {
+    if (!fbReady || hydrationState !== 'ACTIVE' || !currentUser) return;
+    
+    const unsubs: (() => void)[] = [];
+    unsubs.push(onSnapshot(collection(db, 'events'), s => setEvents(s.docs.map(d => ({ id: d.id, ...d.data() } as AppEvent)))));
+    unsubs.push(onSnapshot(query(collection(db, 'eventRegistrations'), where('userId', '==', currentUser.id)), s => {
+      setMyEventRegistrations(s.docs.map(d => d.data().eventId));
+    }));
+    unsubs.push(onSnapshot(collection(db, 'hackathons'), s => setHackathons(s.docs.map(d => ({ id: d.id, ...d.data() } as Hackathon)))));
+    unsubs.push(onSnapshot(collection(db, 'courses'), s => setCourses(s.docs.map(d => ({ id: d.id, ...d.data() } as Course)))));
+    unsubs.push(onSnapshot(collection(db, 'communities'), s => setCommunities(s.docs.map(d => ({ id: d.id, ...d.data() } as Community)))));
+    unsubs.push(onSnapshot(query(collection(db, 'activities'), orderBy('ts', 'desc'), limit(50)), s =>
+      setActivities(s.docs.map(d => d.data() as ActivityLog))));
+
+    return () => unsubs.forEach(u => u());
+  }, [fbReady, hydrationState, currentUser]);
 
   // Fetch myMemberships when communities or currentUser changes
   useEffect(() => {
@@ -287,7 +292,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ── Friends Listeners ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (!fbReady || !currentUser) return;
+    if (!fbReady || !currentUser || hydrationState !== 'ACTIVE') return;
     const unsubs: (() => void)[] = [];
     
     unsubs.push(onSnapshot(collection(db, 'friendRequests'), s => {
