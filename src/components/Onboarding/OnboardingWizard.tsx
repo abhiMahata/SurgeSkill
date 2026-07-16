@@ -24,7 +24,7 @@ export const OnboardingWizard: React.FC<{ isMigration?: boolean }> = ({ isMigrat
   const [age, setAge]   = useState(currentUser?.age || '');
 
   // Step 2
-  const [collegeIdOptions, setCollegeIdOptions] = useState<{id: string, domain: string}[]>([]);
+  const [collegeIdOptions, setCollegeIdOptions] = useState<{id: string, name: string}[]>([]);
   const [selectedCollegeId, setSelectedCollegeId] = useState(currentUser?.collegeId || '');
   const [resolvingDomain, setResolvingDomain] = useState(true);
   const [domainError, setDomainError] = useState('');
@@ -39,27 +39,20 @@ export const OnboardingWizard: React.FC<{ isMigration?: boolean }> = ({ isMigrat
       }
       // Support legacy users who might already have collegeId
       if (isMigration && currentUser?.collegeId) {
-        setCollegeIdOptions([{ id: currentUser.collegeId, domain: user.email.split('@')[1] }]);
+        setCollegeIdOptions([{ id: currentUser.collegeId, name: currentUser.collegeId }]);
         setSelectedCollegeId(currentUser.collegeId);
         setResolvingDomain(false);
         return;
       }
 
-      const domain = user.email.split('@')[1];
-      if (!domain) {
-        setDomainError('Invalid email format.');
-        setResolvingDomain(false);
-        return;
-      }
       try {
-        const q = query(collection(db, 'collegeDomains'), where('domain', '==', domain));
+        const q = query(collection(db, 'collegeDomains'));
         const snap = await getDocs(q);
         if (snap.empty) {
-          setDomainError(`Email domain @${domain} is not currently supported by SurgeSkill.`);
+          setDomainError(`No campuses available.`);
         } else {
-          const options = snap.docs.map(d => ({ id: d.id, domain: d.data().domain }));
+          const options = snap.docs.map(d => ({ id: d.id, name: d.data().name }));
           setCollegeIdOptions(options);
-          if (options.length === 1) setSelectedCollegeId(options[0].id);
         }
       } catch (error: any) {
         console.error("[CollegeDomain]", error);
@@ -224,7 +217,7 @@ export const OnboardingWizard: React.FC<{ isMigration?: boolean }> = ({ isMigrat
                 Verify your Campus 🎓
               </h2>
               <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 6, lineHeight: 1.6 }}>
-                SurgeSkill connects you with communities at your institution based on your email domain.
+                SurgeSkill connects you with communities at your institution.
               </p>
               
               {!currentUser?.collegeId && (
@@ -259,7 +252,7 @@ export const OnboardingWizard: React.FC<{ isMigration?: boolean }> = ({ isMigrat
                     </label>
                     <select style={sel} value={selectedCollegeId} onChange={e => setSelectedCollegeId(e.target.value)}>
                       <option value="">Select your campus…</option>
-                      {collegeIdOptions.map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
+                      {collegeIdOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                 )}

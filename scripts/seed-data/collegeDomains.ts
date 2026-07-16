@@ -9,6 +9,9 @@ export const canonicalCollegeDomains = [
     id: 'easwari-engineering-college',
     domain: 'eec.srmrmp.edu.in',
     name: 'Easwari Engineering College',
+    country: 'India',
+    state: 'Tamil Nadu',
+    city: 'Chennai',
     createdAt: Date.now(),
   }
 ];

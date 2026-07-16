@@ -244,25 +244,14 @@ describe('6. Additional User Profile Protection', () => {
 });
 
 describe('7. Identity Bootstrap & Legacy Migration', () => {
-  it('allows valid STUDENT registration with correct email domain', async () => {
-    // New user student-new with email student-new@collegea.edu
-    const db = getAuthContext('student-new', 'student-new@collegea.edu');
+  it('allows valid STUDENT registration with generic email domain', async () => {
+    // New user student-new with email student-new@gmail.com
+    const db = getAuthContext('student-new', 'student-new@gmail.com');
     await assertSucceeds(setDoc(doc(db, 'users', 'student-new'), { 
       role: 'STUDENT', 
       collegeId: 'college-a', 
       status: 'PENDING_ONBOARDING',
       friendCode: 'FRND12'
-    }));
-  });
-
-  it('denies registration with incorrect email domain', async () => {
-    // New user with gmail tries to claim college-a
-    const db = getAuthContext('student-bad', 'student-bad@gmail.com');
-    await assertFails(setDoc(doc(db, 'users', 'student-bad'), { 
-      role: 'STUDENT', 
-      collegeId: 'college-a', 
-      status: 'PENDING_ONBOARDING',
-      friendCode: 'FRND99'
     }));
   });
 

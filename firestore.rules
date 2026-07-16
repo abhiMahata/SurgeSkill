@@ -39,9 +39,7 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/communities/$(communityId)/members/$(userId)).data.status == 'ACTIVE';
     }
     
-    function getCollegeDomain(collegeId) {
-      return get(/databases/$(database)/documents/collegeDomains/$(collegeId)).data.domain;
-    }
+
 
     function isFriend(pairId) {
       return exists(/databases/$(database)/documents/friendships/$(pairId));
@@ -51,11 +49,7 @@ service cloud.firestore {
       return !exists(/databases/$(database)/documents/blocks/$(pairId));
     }
 
-    function isEmailValidForCollege(collegeId) {
-      // In Firestore Rules, string matching with regex:
-      // Ensure token email matches anything + @ + the domain exactly at the end
-      return request.auth.token.email.matches('.*@' + getCollegeDomain(collegeId) + '$');
-    }
+
 
     function isModifyingProtectedUserFields() {
       let affected = request.resource.data.diff(resource.data).affectedKeys();
@@ -90,17 +84,15 @@ service cloud.firestore {
       // Anyone authenticated can read user profiles
       allow read: if isAuth();
       
-      // Creation MUST be exactly a STUDENT and PENDING_ONBOARDING or ACTIVE, and email MUST match the domain.
+      // Creation MUST be exactly a STUDENT and PENDING_ONBOARDING or ACTIVE.
       allow create: if isSelf(userId) &&
                        request.resource.data.role == 'STUDENT' &&
-                       request.resource.data.status in ['PENDING_ONBOARDING', 'ACTIVE'] &&
-                       isEmailValidForCollege(request.resource.data.collegeId);
+                       request.resource.data.status in ['PENDING_ONBOARDING', 'ACTIVE'];
                        
       // Updates cannot modify protected fields IF they already exist, UNLESS it's an admin.
       // If collegeId is being newly initialized (legacy migration), validate it.
       allow update: if (isSelf(userId) && 
-                        !isModifyingProtectedUserFields() &&
-                        (!('collegeId' in resource.data) && 'collegeId' in request.resource.data ? isEmailValidForCollege(request.resource.data.collegeId) : true)) ||
+                        !isModifyingProtectedUserFields()) ||
                        (isSuperAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'status', 'updatedAt'])) ||
                        (isCollegeAdmin(resource.data.collegeId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
       allow delete: if false; 
