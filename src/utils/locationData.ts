@@ -59,7 +59,7 @@ export const LOCATIONS: LocationData = {
         "SRM Institute of Science and Technology", "Loyola College",
         "Madras Christian College", "Sathyabama Institute of Science and Technology",
         "Hindustan Institute of Technology and Science", "SASTRA University (Chennai Campus)",
-        "Vel Tech University",
+        "Vel Tech University", "Easwari Engineering College",
       ],
       "Coimbatore": [
         "PSG College of Technology", "Amrita School of Engineering",

@@ -4,5 +4,11 @@ export const canonicalCollegeDomains = [
     domain: 'srmist.edu.in',
     name: 'SRM Institute of Science and Technology, Ramapuram Campus',
     createdAt: Date.now(),
+  },
+  {
+    id: 'easwari-engineering-college',
+    domain: 'eec.srmrmp.edu.in',
+    name: 'Easwari Engineering College',
+    createdAt: Date.now(),
   }
 ];
